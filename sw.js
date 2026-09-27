@@ -4,7 +4,7 @@
    ➜ Bump CACHE_VERSION whenever you change any game file, so players
      get the "New version — tap to refresh" banner.
    ===================================================================== */
-const CACHE_VERSION = 'kuromi-v6';
+const CACHE_VERSION = 'kuromi-v7';
 const FONT_CACHE = 'kuromi-fonts';
 
 const CORE = [
