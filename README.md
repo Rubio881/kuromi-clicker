@@ -36,6 +36,20 @@ To make it **installable and playable offline**, it has to be served over `https
 
 App icons live in `app-icons/` and were generated from `assets/kuromi.png`. If you swap in a different character image, remake them at 192×192, 512×512, 512×512 maskable (character inside the middle 60%) and 180×180 (`apple-touch-icon.png`).
 
+## Live site & redeploying
+
+Play it at **https://rubio881.github.io/kuromi-clicker/** (GitHub Pages, served from the `main` branch root).
+
+**iPhone:** open the link in **Safari** → tap **Share** → **Add to Home Screen** → **Add**. It opens full-screen like an app and works offline.
+
+**After making changes**, run this one command from this folder:
+
+```
+./deploy.sh "what changed"
+```
+
+It bumps `CACHE_VERSION` in `sw.js` for you (so installed copies get the "New version — tap to refresh" banner), commits everything and pushes. GitHub Pages is live again about a minute later.
+
 ## Images
 
 Put your images in `assets/`. See [`assets/README.md`](assets/README.md) for the exact filenames and sizes.
