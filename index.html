@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kuromi Clicker</title>
+  <meta name="description" content="A cute-but-bratty fan-made incremental clicker. Non-commercial.">
+  <meta name="theme-color" content="#1a0f24">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="app-icons/icon-192.png">
+  <link rel="apple-touch-icon" href="app-icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kuromi">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&family=Pirata+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-mtab="click">
+  <div class="bg-pattern" aria-hidden="true"></div>
+  <div id="sparkles" aria-hidden="true"></div>
+  <div id="decor" aria-hidden="true"></div>
+  <div id="event-layer" aria-hidden="true"></div>
+  <div id="vignette" class="vignette" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand"><span class="skull-ico"></span><span>Kuromi Clicker</span></div>
+    <nav class="tabs">
+      <button class="sticker" data-open="stats">Stats</button>
+      <button class="sticker" data-open="achievements">Achievements</button>
+      <button class="sticker" data-open="dreamshop">Dream Shop</button>
+      <button class="sticker" data-open="settings">Settings</button>
+      <button class="sticker wake wake-trigger" data-open="prestige" hidden>☾ Wake Up</button>
+    </nav>
+  </header>
+
+  <main class="columns">
+    <!-- LEFT: counter + big clickable character (sticky header on phones) -->
+    <section class="panel col-left" id="col-left">
+      <h1 id="title" class="game-title">Kuromi Clicker</h1>
+      <div class="bank">
+        <div class="bank-main"><span class="skull-ico"></span><span id="bank">0</span> <span class="unit">Kuromis</span>
+          <button id="gift-btn" class="gift-badge" data-tip="gift" aria-label="Daily gift"><span class="gift-ico">🎁</span><span class="gift-count" id="gift-streak"></span></button></div>
+        <div class="bank-cps">per second: <span id="cps">0</span></div>
+      </div>
+      <div class="click-area">
+        <div class="spotlight" aria-hidden="true"></div>
+        <button id="kuromi-btn" class="kuromi-btn" aria-label="Click Kuromi">
+          <img id="kuromi-img" src="assets/kuromi.png" alt="Kuromi" draggable="false">
+          <div id="kuromi-placeholder" class="placeholder" hidden>
+            <span class="ph-skull"></span>
+            <span class="ph-text">drop kuromi.png in /assets</span>
+          </div>
+        </button>
+      </div>
+      <div class="combo" id="combo">
+        <div class="combo-label"><span id="combo-name">Combo</span><span id="combo-text"></span></div>
+        <div class="combo-track"><div class="combo-fill" id="combo-fill"></div></div>
+      </div>
+      <div id="buffs" class="buffs"></div>
+      <div class="click-power">+<span id="click-power">1</span> per click</div>
+      <!-- lives here on desktop; moved under the Lair on phones (game.js placeGoals) -->
+      <div class="goals" id="goals">
+        <h2 class="section-title">Next goals</h2>
+        <div id="goals-list" class="goals-list"></div>
+      </div>
+    </section>
+
+    <!-- MIDDLE: news ticker + lair -->
+    <section class="panel col-mid" id="col-mid">
+      <div id="event-banner" class="event-banner" hidden>🎂 <b>Kuromi's Birthday Bash</b> · Oct 24 – Nov 2 · watch for Birthday Cake bursts!</div>
+      <div class="ticker" aria-live="off"><div class="ticker-view"><div id="ticker-text" class="ticker-track"></div></div></div>
+      <div class="divider" aria-hidden="true"><span>🎀</span></div>
+      <h2 class="section-title">The Lair</h2>
+      <div id="lair" class="lair"></div>
+    </section>
+
+    <!-- RIGHT: upgrades + store -->
+    <section class="panel col-right" id="col-right">
+      <div class="upg-section">
+        <h2 class="section-title">Upgrades</h2>
+        <div id="upgrades" class="upgrades"></div>
+      </div>
+      <div class="store-section">
+        <div class="divider pin" aria-hidden="true"><span>🧷</span></div>
+        <h2 class="section-title m-only">Buildings</h2>
+        <div class="store-controls">
+          <div class="seg" id="mode-seg">
+            <button class="seg-btn active" data-mode="buy">Buy</button>
+            <button class="seg-btn" data-mode="sell">Sell</button>
+          </div>
+          <div class="seg" id="amount-seg">
+            <button class="seg-btn active" data-amt="1">×1</button>
+            <button class="seg-btn" data-amt="10">×10</button>
+            <button class="seg-btn" data-amt="100">×100</button>
+            <button class="seg-btn" data-amt="max">Max</button>
+          </div>
+        </div>
+        <div id="store" class="store"></div>
+      </div>
+    </section>
+
+    <!-- MORE: phone-only menu -->
+    <section class="panel col-more" id="col-more">
+      <h2 class="section-title">More</h2>
+      <div class="more-grid">
+        <button class="sticker more-btn" data-open="stats">📊 Stats</button>
+        <button class="sticker more-btn" data-open="achievements">🏆 Achievements</button>
+        <button class="sticker more-btn" data-open="dreamshop">💎 Dream Shop</button>
+        <button class="sticker more-btn" data-open="settings">⚙️ Settings</button>
+        <button class="sticker more-btn wake wake-trigger" data-open="prestige" hidden>☾ Wake Up</button>
+        <button class="sticker more-btn pink" id="install-btn" hidden>📲 Install app</button>
+      </div>
+      <p class="muted small" id="ios-install-hint" hidden>To install on iPhone: tap <b>Share</b> → <b>Add to Home Screen</b>.</p>
+      <div class="divider" aria-hidden="true"><span>🎀</span></div>
+      <div id="more-stats" class="stat-grid"></div>
+    </section>
+  </main>
+
+  <!-- Phone tab bar -->
+  <nav class="mtabs" aria-label="Sections">
+    <button class="mtab active" data-mtab="click"><span class="mt-ico">💀</span><span>Click</span></button>
+    <button class="mtab" data-mtab="buildings"><span class="mt-ico">🏚️</span><span>Buildings</span></button>
+    <button class="mtab" data-mtab="upgrades"><span class="mt-ico">🎀</span><span>Upgrades</span><span class="mt-badge" id="upg-badge" hidden></span></button>
+    <button class="mtab" data-mtab="more"><span class="mt-ico">☰</span><span>More</span></button>
+  </nav>
+
+  <button id="update-banner" class="update-banner" hidden>✨ New version — tap to refresh</button>
+  <div id="fx-layer" class="fx-layer" aria-hidden="true"></div>
+  <div id="burst-layer"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+  <div id="modal-root"></div>
+  <div id="debug" class="debug" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="icons.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

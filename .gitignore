@@ -1,0 +1,20 @@
+# Local tooling — not part of the site
+node_modules/
+test*.js
+verify.js
+sim.js
+*.log
+
+# Screenshots from test runs (keep assets/ and app-icons/ images!)
+shot-*.png
+m-*.png
+v[0-9]*-*.png
+deploy-*.png
+iconsheet*.png
+screenshots/
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
