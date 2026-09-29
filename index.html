@@ -24,6 +24,7 @@
   <div id="decor" aria-hidden="true"></div>
   <div id="event-layer" aria-hidden="true"></div>
   <div id="vignette" class="vignette" aria-hidden="true"></div>
+  <div id="event-edge" class="event-edge" aria-hidden="true"></div>
 
   <header class="topbar">
     <div class="brand"><span class="skull-ico"></span><span>Kuromi Clicker</span></div>
@@ -32,9 +33,11 @@
       <button class="sticker" data-open="achievements">Achievements</button>
       <button class="sticker" data-open="dreamshop">Dream Shop</button>
       <button class="sticker" data-open="settings">Settings</button>
+      <button class="sticker event-trigger" data-open="event" hidden>🎃 Event</button>
       <button class="sticker wake wake-trigger" data-open="prestige" hidden>☾ Wake Up</button>
     </nav>
   </header>
+  <button id="event-banner" class="event-banner" hidden aria-label="Open the event panel"><span id="event-banner-text">🎃 Kuromi's Birthday Nightmare</span></button>
 
   <main class="columns">
     <!-- LEFT: counter + big clickable character (sticky header on phones) -->
@@ -43,16 +46,21 @@
       <div class="bank">
         <div class="bank-main"><span class="skull-ico"></span><span id="bank">0</span> <span class="unit">Kuromis</span>
           <button id="gift-btn" class="gift-badge" data-tip="gift" aria-label="Daily gift"><span class="gift-ico">🎁</span><span class="gift-count" id="gift-streak"></span></button></div>
-        <div class="bank-cps">per second: <span id="cps">0</span></div>
+        <div class="bank-cps">per second: <span id="cps">0</span>
+          <span id="treats-pill" class="treats-pill" data-tip="treats" hidden>🍬 <b id="treats">0</b></span></div>
       </div>
       <div class="click-area">
         <div class="spotlight" aria-hidden="true"></div>
         <button id="kuromi-btn" class="kuromi-btn" aria-label="Click Kuromi">
-          <img id="kuromi-img" src="assets/kuromi.png" alt="Kuromi" draggable="false">
-          <div id="kuromi-placeholder" class="placeholder" hidden>
-            <span class="ph-skull"></span>
-            <span class="ph-text">drop kuromi.png in /assets</span>
-          </div>
+          <span class="kuromi-flip"><span class="kuromi-figure">
+            <span id="costume-back" class="costume costume-back" aria-hidden="true"></span>
+            <img id="kuromi-img" src="assets/kuromi.png" alt="Kuromi" draggable="false">
+            <div id="kuromi-placeholder" class="placeholder" hidden>
+              <span class="ph-skull"></span>
+              <span class="ph-text">drop kuromi.png in /assets</span>
+            </div>
+            <span id="costume-front" class="costume costume-front" aria-hidden="true"></span>
+          </span></span>
         </button>
       </div>
       <div class="combo" id="combo">
@@ -70,7 +78,6 @@
 
     <!-- MIDDLE: news ticker + lair -->
     <section class="panel col-mid" id="col-mid">
-      <div id="event-banner" class="event-banner" hidden>🎂 <b>Kuromi's Birthday Bash</b> · Oct 24 – Nov 2 · watch for Birthday Cake bursts!</div>
       <div class="ticker" aria-live="off"><div class="ticker-view"><div id="ticker-text" class="ticker-track"></div></div></div>
       <div class="divider" aria-hidden="true"><span>🎀</span></div>
       <h2 class="section-title">The Lair</h2>
@@ -110,6 +117,7 @@
         <button class="sticker more-btn" data-open="achievements">🏆 Achievements</button>
         <button class="sticker more-btn" data-open="dreamshop">💎 Dream Shop</button>
         <button class="sticker more-btn" data-open="settings">⚙️ Settings</button>
+        <button class="sticker more-btn event-trigger" data-open="event" hidden>🎃 Event</button>
         <button class="sticker more-btn wake wake-trigger" data-open="prestige" hidden>☾ Wake Up</button>
         <button class="sticker more-btn pink" id="install-btn" hidden>📲 Install app</button>
       </div>

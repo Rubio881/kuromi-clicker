@@ -59,15 +59,60 @@ window.KD = (() => {
     audio: { sfxVolume: 0.7, musicVolume: 0.45 },
   };
 
-  /* ---------- Limited events ---------- */
-  const EVENTS = {
-    halloween: {
-      name: "Kuromi's Birthday Bash",
-      start: [10, 24], end: [11, 2],           // [month, day], inclusive, by device date
-      cakeChance: 0.35,                        // chance a Nightmare Burst is a Birthday Cake while the event runs
-      cake: { mult: 13, duration: 31 },        // ×13 production for 31s
-      decor: ['🎃', '🍬', '🍭', '🎃', '🕯️', '🍬'],
+  /* ---------- Limited-time event ----------
+     One reusable block: copy it and change the numbers/text for another event later.
+     Dates are [month, day], inclusive, by the device's local date. */
+  const EVENT = {
+    id: 'halloween',
+    name: "Kuromi's Birthday Nightmare",
+    icon: '🎃',
+    start: [10, 24], end: [11, 2],
+    specialDay: {                               // Birthday Day
+      date: [10, 31], name: 'Birthday Day', icon: '🎂',
+      treatDropMult: 2,                         // ×2 Treat drops all day
+      giftMult: 3, giftTreats: 31,              // daily gift = ×3 value + 31 Treats
+      cakeChance: 0.35,                         // chance a burst is a Birthday Cake (Birthday Day only)
     },
+    cake: { mult: 13, duration: 31 },           // ×13 production for 31s
+    currency: { name: 'Treats', icon: '🍬', dropChance: 0.02, offlinePerHour: 4, offlineCap: 30 },
+    burst: {                                    // Trick-or-Treat Bursts (replace Nightmare Bursts during the event)
+      treats: [3, 8],                           // Treats per burst (random in range)
+      treatChance: 0.65,                        // otherwise it's a Trick
+      treatBoost: 1.5,                          // "Treat" outcome = normal burst reward ×1.5 (duration or payout)
+    },
+    trick: { duration: 20, prodMult: 3, kinds: ['shuffle', 'spooky', 'flip'] }, // harmless pranks, still pay ×3
+    // Shop items. kind: boost (temporary, one of each at a time) · costume · skin · font · cursor · upgrade (permanent)
+    shop: [
+      { id: 'boost_sugar',    kind: 'boost',   name: 'Sugar Rush',        cost: 15,  icon: '🍭', buff: 'sugar',   mult: 2,   duration: 600, desc: '×2 click power for 10 minutes.' },
+      { id: 'boost_haunted',  kind: 'boost',   name: 'Haunted Lair',      cost: 25,  icon: '👻', buff: 'haunted', mult: 1.5, duration: 900, desc: '+50% production for 15 minutes.' },
+      { id: 'costume_hat',    kind: 'costume', name: 'Witch Hat',         cost: 40,  art: 'cos_hat',    desc: 'A tall, slightly crooked witch hat.' },
+      { id: 'costume_bucket', kind: 'costume', name: 'Pumpkin Bucket',    cost: 40,  art: 'cos_bucket', desc: 'A tiny trick-or-treat bucket.' },
+      { id: 'costume_wings',  kind: 'costume', name: 'Bat Wings',         cost: 60,  art: 'cos_wings',  desc: 'Little bat wings, worn behind.' },
+      { id: 'costume_crown',  kind: 'costume', name: 'Candy-Corn Crown',  cost: 80,  art: 'cos_crown',  desc: 'Royalty, but make it sugary.' },
+      { id: 'skin_pumpkin',   kind: 'skin',    name: 'Pumpkin Punk skin', cost: 120, icon: '🎃', skin: 'pumpkin', desc: 'Orange, black and purple. Pick it in Settings → Skins.' },
+      { id: 'font_spooky',    kind: 'font',    name: 'Spooky ticker font', cost: 30, icon: '🕸️', desc: 'Headlines in a creepy font.' },
+      { id: 'cursor_bat',     kind: 'cursor',  name: 'Bat cursor',        cost: 30,  icon: '🦇', desc: 'Click Kuromi with a tiny bat.' },
+      { id: 'wish',           kind: 'upgrade', name: 'Birthday Wish',     cost: 750, icon: '🕯️', pct: 0.05, desc: '<b>+5%</b> all production, forever.' },
+    ],
+    decor: ['ev_bat', 'ev_pumpkin', 'ev_bat', 'ev_pumpkin', 'ev_bat', 'ev_pumpkin', 'ev_bat'], // few + slow
+    // Headlines that only run during the event (Kuromi's voice).
+    news: [
+      'BREAKING: Local imp demands 31 candles. Fire department on standby.',
+      'Birthday cake sightings reported in the Nightmare Realm. Baku "not involved", has frosting on face.',
+      'Pumpkin prices soar. A certain someone bought all of them "for decorations".',
+      'Rival bunny sends birthday card. Card returned with a skull sticker and a tiny "thx".',
+      'Local imp demands birthday cake, receives three. Demands a fourth "on principle".',
+      'Baku eats a nightmare, rates it 10/10, "would dream again".',
+      'Trick-or-treaters report receiving "a lecture on proper skull etiquette" and one (1) candy.',
+      'Jack-o\'-lanterns across town mysteriously carved with tiny jester hoods.',
+      'Costume contest cancelled after one entrant "won by intimidation".',
+      'Kuromi\'s birthday party guest list: 1 name, underlined three times. It is hers.',
+      'Candy-corn declared "the official vegetable of mischief". Nutritionists weep.',
+      'Bats seen forming a heart shape over the lair. Sources say they were paid in Treats.',
+      'Haunted house tour ends early: the ghosts wanted her autograph.',
+      'Local bunny\'s pumpkin pie goes missing. Crumbs lead directly to a scooter.',
+      'Moon briefly wears a witch hat. Astronomers "not even surprised anymore".',
+    ],
   };
 
   /* ---------- Skins (colour themes) ----------
@@ -76,6 +121,8 @@ window.KD = (() => {
     { id: 'default',   name: 'Midnight Purple', unlock: null,                               preview: ['#1a0f24', '#2a1838', '#8b5cf6', '#ff5fae'] },
     { id: 'bubblegum', name: 'Bubblegum Punk',  unlock: { ach: 30, perk: 'theme_bubblegum' }, preview: ['#2a0f22', '#3d1834', '#e0569b', '#ffd6ec'] },
     { id: 'goth',      name: 'Monochrome Goth', unlock: { ach: 60, perk: 'theme_goth' },      preview: ['#0c0c0e', '#1c1c21', '#8d8d97', '#f2f2f5'] },
+    // event skin: bought in the event shop; hidden in the picker until owned (or while the event runs)
+    { id: 'pumpkin',   name: 'Pumpkin Punk',    unlock: { shop: 'skin_pumpkin' }, event: true,  preview: ['#140b10', '#2a1420', '#ff8a2b', '#a855f7'] },
   ];
 
   /* ---------- Background music (Web Audio chiptune) ----------
@@ -297,7 +344,6 @@ window.KD = (() => {
     .forEach(([n, name], i) => ach(`prestige_${i}`, name, `Wake Up <b>${n}</b> time${n > 1 ? 's' : ''}.`, 'Wake Up', '🌙', { type: 'prestige', n }));
 
   ach('hid_title', 'Stop Poking My Name', 'Click the title 13 times.', 'Secret', '🦇', { type: 'title' }, true);
-  ach('hid_halloween', 'Happy Birthday, Brat!', 'Play on October 31st.', 'Secret', '🎂', { type: 'halloween' }, true);
   ach('hid_thirteen', 'Unlucky for Some', 'Own exactly 13 of every building.', 'Secret', '🔮', { type: 'thirteen' }, true);
   ach('hid_sellbaku', 'How Could You', 'Sell a Baku. He trusted you.', 'Secret', '💔', { type: 'soldBaku' }, true);
   ach('hid_midnight', 'Witching Hour', 'Play between midnight and 1am.', 'Secret', '🕛', { type: 'midnight' }, true);
@@ -312,7 +358,7 @@ window.KD = (() => {
   ach('daily_2', 'Seven Nights of Mischief', 'Reach a <b>7</b>-day gift streak.', 'Daily gifts', '🎁', { type: 'streak', n: 7 });
   ach('daily_3', 'Spoiled Rotten', 'Open <b>30</b> daily gifts.', 'Daily gifts', '🎁', { type: 'dailyClaims', n: 30 });
   ach('skin_0', 'New Look, Who Dis', 'Unlock a second skin.', 'Style & sound', '👗', { type: 'skins', n: 2 });
-  ach('skin_1', 'Full Wardrobe', 'Unlock every skin.', 'Style & sound', '👗', { type: 'skins', n: 3 });
+  ach('skin_1', 'Full Wardrobe', 'Unlock three skins.', 'Style & sound', '👗', { type: 'skins', n: 3 });
   ach('music_0', 'DJ Brat', 'Turn on the background music.', 'Style & sound', '🎵', { type: 'music' });
   ach('stats_0', 'Graph Goblin', 'Open the Stats screen.', 'Style & sound', '📈', { type: 'statsOpened' });
   ach('time_0', 'One More Click', 'Play for <b>1 hour</b>.', 'Time played', '⏳', { type: 'timePlayed', n: 3600 });
@@ -322,13 +368,24 @@ window.KD = (() => {
   ach('total_0', 'Crowded Lair', 'Own <b>500</b> buildings in total.', 'Buildings', '🏚️', { type: 'totalBuildings', n: 500 });
   ach('total_1', 'Mischief Metropolis', 'Own <b>1,000</b> buildings in total.', 'Buildings', '🏙️', { type: 'totalBuildings', n: 1000 });
 
-  /* ---------- Limited: Kuromi's Birthday Bash (Oct 24 – Nov 2) ---------- */
-  const EV = 'Birthday Bash (limited)';
-  ach('ev_play', 'Party Crasher', 'Play during Kuromi\'s Birthday Bash.', EV, '🎉', { type: 'evPlay' });
+  /* ---------- Limited: Kuromi's Birthday Nightmare (Oct 24 – Nov 2) — marked with a 🎃 ---------- */
+  const EV = '🎃 Birthday Nightmare (limited)';
+  ach('ev_play', 'Party Crasher', 'Play during Kuromi\'s Birthday Nightmare.', EV, '🎉', { type: 'evPlay' });
   ach('ev_cake1', 'Cake Snatcher', 'Click a Birthday Cake burst.', EV, '🎂', { type: 'evCakes', n: 1 });
   ach('ev_cake13', 'Sweet Thirteen', 'Click <b>13</b> Birthday Cake bursts.', EV, '🎂', { type: 'evCakes', n: 13 });
   ach('ev_earn', 'Birthday Haul', 'Collect <b>3,100,000</b> Kuromis during the event.', EV, '🎃', { type: 'evEarned', n: 3.1e6 });
   ach('ev_combo', 'Sugar Rush', 'Fill the combo meter during the event.', EV, '🍬', { type: 'evCombo' });
+  // id kept from the old secret achievement so existing saves keep it
+  ach('hid_halloween', 'Happy Birthday, Brat!', 'Play on Birthday Day (October 31st).', EV, '🎂', { type: 'halloween' });
+  ach('ev_treat1', 'Sweet Tooth', 'Collect your first Treat.', EV, '🍬', { type: 'evTreats', n: 1 });
+  ach('ev_treat100', 'Candy Hoarder', 'Collect <b>100</b> Treats.', EV, '🍬', { type: 'evTreats', n: 100 });
+  ach('ev_treat1000', 'Sugar Empire', 'Collect <b>1,000</b> Treats.', EV, '🍬', { type: 'evTreats', n: 1000 });
+  ach('ev_tob13', 'Trick or Treat ×13', 'Click <b>13</b> Trick-or-Treat Bursts.', EV, '🎃', { type: 'evBursts', n: 13 });
+  ach('ev_tricked5', 'Pranked!', 'Get tricked <b>5</b> times.', EV, '🙃', { type: 'evTricked', n: 5 });
+  ach('ev_costumes', 'Dress-Up Queen', 'Buy every costume.', EV, '🧙', { type: 'evCostumes' });
+  ach('ev_bday_costume', 'Birthday Suit (Costume)', 'Wear a costume on Birthday Day.', EV, '👑', { type: 'evBdayCostume' });
+  ach('ev_wish', 'Make a Wish', 'Buy the Birthday Wish.', EV, '🕯️', { type: 'evWish' });
+  ach('ev_31', 'Thirty-One Candles', 'Own <b>31</b> of any building on Birthday Day.', EV, '🕯️', { type: 'ev31' }, true);
   ACHIEVEMENTS.filter(a => a.group === EV).forEach(a => { a.limited = true; });
 
   /* ---------- Dream Shop (prestige perks, bought with Dream Shards) ---------- */
@@ -385,15 +442,7 @@ window.KD = (() => {
     [1e9, '🔮'], [1e10, '⛓️'], [1e11, '🎸'], [1e12, '🌌'], [1e14, '🪐'], [1e16, '💫'],
   ];
 
-  // Extra headlines while the birthday event runs.
-  const NEWS_EVENT = [
-    'BREAKING: Local imp demands 31 candles. Fire department on standby.',
-    'Birthday cake sightings reported in the Nightmare Realm. Baku "not involved", has frosting on face.',
-    'Pumpkin prices soar. A certain someone bought all of them "for decorations".',
-    'Rival bunny sends birthday card. Card returned with a skull sticker and a tiny "thx".',
-  ];
-
   const NUMBER_SUFFIXES = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
 
-  return { SAVE_VERSION, CONFIG, BUILDINGS, TIERS, UPGRADES, ACHIEVEMENTS, DREAM_PERKS, NEWS, NEWS_DYNAMIC, NEWS_EVENT, DECOR_MILESTONES, NUMBER_SUFFIXES, EVENTS, SKINS, MUSIC };
+  return { SAVE_VERSION, CONFIG, BUILDINGS, TIERS, UPGRADES, ACHIEVEMENTS, DREAM_PERKS, NEWS, NEWS_DYNAMIC, DECOR_MILESTONES, NUMBER_SUFFIXES, EVENT, SKINS, MUSIC };
 })();

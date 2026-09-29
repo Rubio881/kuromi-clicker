@@ -14,7 +14,14 @@ It uses plain HTML, CSS and vanilla JavaScript. Google Fonts load from the web, 
 - **Lair & goals:** each owned building gets a row of up to 8 icons plus a "+N" badge. The Lair fills the middle column; with many buildings it scrolls a whole row at a time, so no row is ever cut off. **Next goals** (under "per click" on desktop, under the Lair on phones) shows the 3 milestones or upgrades you're closest to, with progress bars.
 - **News ticker:** headlines scroll continuously with no gaps; hover to pause.
 - **Daily gift:** a small 🎁 badge next to the counter wiggles when a gift is ready, once a day, worth 10 minutes of production. Each day in a row adds +15%, up to day 7; missing a day resets the streak.
-- **Kuromi's Birthday Bash (Oct 24 – Nov 2, by device date):** pumpkin/candy overlay, Birthday Cake bursts (×13 production for 31s), and 5 limited achievements.
+- **Kuromi's Birthday Nightmare (Oct 24 – Nov 2, by device date; Oct 31 is Birthday Day):**
+  - A warm purple→orange theme on top of any skin, with a few slow bats and pumpkins, a candle glow and orange stitching.
+  - A live countdown banner, tap it to open the event panel.
+  - **Treats 🍬** drop from about 2% of clicks. Trick-or-Treat Bursts give Treats plus either a Treat (a boosted reward) or a Trick (a harmless 20s prank that still pays ×3). You also collect a few Treats while offline.
+  - The Treat shop has boosts (Sugar Rush, Haunted Lair), costumes drawn on top of your image (witch hat, pumpkin bucket, bat wings, candy-corn crown), the Pumpkin Punk skin, a spooky ticker font, a bat cursor, and **Birthday Wish** (+5% forever).
+  - **Birthday Day:** confetti, ×2 Treats, Birthday Cake bursts (×13 for 31s), and a ×3 birthday gift with 31 Treats.
+  - 15 limited 🎃 achievements and 15 event headlines.
+  - Outside the dates everything event-related is hidden, but Treats, cosmetics and achievements stay in your save, and the shop stays browsable.
 - **Skins:** Midnight Purple, Bubblegum Punk (30 achievements or Dream Shop) and Monochrome Goth (60 achievements or Dream Shop). Pick one in Settings → Skins.
 - **Sound:** generated effects plus an optional chiptune loop (music box + soft bass), with separate volume sliders. Music is off by default.
 - **Stats:** time played, best Kuromis/sec, total clicks, bursts, and a graph of Kuromis/sec over the last 10 minutes.
@@ -81,7 +88,7 @@ If an image is missing, the character becomes a purple placeholder circle and bu
 - **`DREAM_PERKS`**: prestige shop items, bought with Dream Shards.
 - **`NEWS`** / **`NEWS_DYNAMIC`** / **`DECOR_MILESTONES`**: ticker headlines and background decorations, each gated by all-time Kuromis. `NEWS_EVENT` adds headlines during the birthday event.
 - **`CONFIG.crit`, `CONFIG.combo`, `CONFIG.daily`**: CRIT frequency and multiplier; combo fill per click, decay per second, multiplier and duration; daily gift minutes, streak bonus and cap.
-- **`EVENTS.halloween`**: the event window (`start`/`end` as `[month, day]`), the chance a burst is a Birthday Cake, and the cake buff.
+- **`EVENT`**: one reusable block holding everything for the event: dates (`start`/`end`, `[month, day]`), the special day and its bonuses, Treat drop and offline rates, Trick-or-Treat odds, trick duration and payout, the shop items (cost, kind, effect), decor and headlines. Copy it for a future event.
 - **`SKINS`**: each skin's unlock rule (`ach` count and/or Dream Shop `perk`) and its preview colours. The colours themselves live in `style.css` (`body[data-theme="…"]`).
 - **Upgrade art:** each upgrade in `data.js` has an `icon` (an `up_*` id from `icons.js`) and `badges`: the building ids it boosts, or `b_click` / `b_all` / `b_trophy` / `b_burst`. Tier upgrades take their art from `TIERS.icons`.
 - **`CONFIG.lairRowCap`, `tickerSpeed`, `goalsShown`**: icons per lair row, ticker speed in px/s, and how many Next goals to show.
@@ -108,5 +115,5 @@ total = Σ(base × count × tierMult × synergyMult)
 
 ## Debug panel
 
-Press **D three times** quickly. It gives you: add Kuromis, ×100 speed, spawn a Nightmare Burst or Birthday Cake, Frenzy, fill combo, next click = CRIT, skip a day (for the daily gift), **Event: auto/on/off** (forces the birthday event), unlock all, fake 1h away (to test the offline modal), and reset.
+Press **D three times** quickly. It gives you: add Kuromis, ×100 speed, spawn a Nightmare Burst or Birthday Cake, Frenzy, fill combo, next click = CRIT, skip a day (for the daily gift), **Event: auto → on → birthday → off** (preview the event or Birthday Day any time), +100 Treats, unlock all, fake 1h away (to test the offline modal), and reset.
 The browser console also exposes `window.KG` for poking at the game.

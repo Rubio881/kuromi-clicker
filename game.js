@@ -86,7 +86,12 @@
       soldBaku: false,
       combos: 0, crits: 0,
       daily: { last: '', streak: 0, claims: 0 },   // last = local 'YYYY-MM-DD' of the last gift opened
-      event: { cakes: 0, earned: 0, combos: 0, played: false },
+      event: {
+        cakes: 0, earned: 0, combos: 0, played: false,
+        treats: 0, treatsTotal: 0, tbursts: 0, tricked: 0,   // Treats 🍬 (kept in the save between years)
+        owned: [], costume: '', tickerFont: false, batCursor: false, // shop purchases + what's equipped
+        greeted: '', bdayCostume: false,
+      },
       timePlayed: 0, bestCps: 0,
       statsOpened: false, musicPlayed: false,
       skinsUnlocked: ['default'],
@@ -117,6 +122,9 @@
       if (kind === 'prod' && bf.type === 'cake') m *= EV.cake.mult;
       if (kind === 'click' && bf.type === 'mischief') m *= C.mischief.mult;
       if (kind === 'click' && bf.type === 'combo') m *= C.combo.mult;
+      if (kind === 'prod' && bf.type === 'trick') m *= EV.trick.prodMult;
+      if (kind === 'prod' && bf.type === 'haunted') m *= SHOP_BY_ID.boost_haunted.mult;
+      if (kind === 'click' && bf.type === 'sugar') m *= SHOP_BY_ID.boost_sugar.mult;
     }
     return m;
   }
@@ -128,7 +136,8 @@
                × globalMult                          Π (1 + Gang Loyalty %)
                × (1 + achievements × pinkyBonus)     pinkyBonus = 4% × Σ k (Pinky Promise upgrades)
                × (1 + dreamShards × 1%)              prestige
-               × buffMult                            Frenzy ×7 etc.
+               × (1 + Birthday Wish 5%)              event shop, permanent
+               × buffMult                            Frenzy ×7, Cake ×13, Trick ×3, Haunted Lair ×1.5 …
 
      tierMult_b    = 2 ^ (tier upgrades bought for b)
      synergyMult_b = 1 + Σ (pct × count of the partner building)
@@ -156,7 +165,8 @@
     const pinkyMult = 1 + owned.ach.size * pinkyBonus;
     const shardMult = 1 + state.shardsEarned * C.shardBonus;
     const prodBuff = buffMult('prod');
-    const allNoBuff = globalMult * pinkyMult * shardMult;
+    const wishMult = 1 + (evOwns('wish') ? SHOP_BY_ID.wish.pct : 0);
+    const allNoBuff = globalMult * pinkyMult * shardMult * wishMult;
     const all = allNoBuff * prodBuff;
 
     let raw = 0;
@@ -195,7 +205,9 @@
      Calendar: daily gift + limited events use the device's local date.
      `clock.offset` lets the debug panel / tests pretend it's another day.
      ===================================================================== */
-  const EV = D.EVENTS.halloween;
+  const EV = D.EVENT, SD = D.EVENT.specialDay;
+  const SHOP_BY_ID = byId(EV.shop);
+  const COSTUMES = EV.shop.filter(i => i.kind === 'costume');
   const clock = { offset: 0, now: () => new Date(Date.now() + clock.offset) };
   const pad2 = n => String(n).padStart(2, '0');
   const dayKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -204,13 +216,33 @@
     const a = ev.start[0] * 100 + ev.start[1], b = ev.end[0] * 100 + ev.end[1];
     return a <= b ? v >= a && v <= b : v >= a || v <= b; // handles windows that wrap past New Year
   }
+  // eventOverride (debug panel): 'auto' (device date) · 'on' (event, not Birthday Day) · 'birthday' · 'off'
   function eventActive() {
     const o = state.settings.eventOverride;
-    if (o === 'on') return true;
+    if (o === 'on' || o === 'birthday') return true;
     if (o === 'off') return false;
     return inEventWindow(clock.now());
   }
-  let eventOn = false; // cached each slow tick
+  function onSpecialDay() {
+    const o = state.settings.eventOverride;
+    if (o === 'birthday') return true;
+    if (o === 'on' || o === 'off') return false;
+    const d = clock.now();
+    return inEventWindow(d) && d.getMonth() + 1 === SD.date[0] && d.getDate() === SD.date[1];
+  }
+  // When does the current (or next) event window end? Local midnight after the last day.
+  function eventEndsAt() {
+    const n = clock.now();
+    for (const y of [n.getFullYear() - 1, n.getFullYear(), n.getFullYear() + 1]) {
+      const endYear = EV.end[0] < EV.start[0] ? y + 1 : y;
+      const end = new Date(endYear, EV.end[0] - 1, EV.end[1] + 1);
+      if (end > n) return end;
+    }
+    return null;
+  }
+  const evOwns = id => state.event.owned.includes(id);
+  const hasEventStuff = () => state.event.treatsTotal > 0 || state.event.owned.length > 0;
+  let eventOn = false, bdayOn = false; // cached each slow tick
 
   /* =====================================================================
      Time — production uses real elapsed time, so throttled tabs stay correct
@@ -284,6 +316,8 @@
     if (e && (e.clientX || e.clientY)) { x = e.clientX; y = e.clientY; }
     else { const r = kuromiBtn.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 3; }
 
+    if (eventOn && Math.random() < EV.currency.dropChance * (bdayOn ? SD.treatDropMult : 1)) gainTreats(1, x, y);
+
     const motionOk = !reducedMotion.matches;
     if (motionOk) {
       if (bounceAnim) bounceAnim.cancel();
@@ -302,6 +336,28 @@
       if (now - lastPopAt > 40) { sound('pop'); lastPopAt = now; }
     }
     haptic();
+  }
+
+  // Treats: count them, and fly a little 🍬 from where it dropped to the counter.
+  function gainTreats(n, x, y) {
+    if (!(n > 0)) return;
+    state.event.treats += n; state.event.treatsTotal += n;
+    const pill = $('#treats-pill');
+    $('#treats').textContent = fmt(state.event.treats);
+    if (x === undefined || pill.hidden || reducedMotion.matches || !state.settings.particles) return;
+    const to = pill.getBoundingClientRect();
+    const t = document.createElement('div');
+    t.className = 'treat-fly';
+    t.textContent = EV.currency.icon;
+    t.style.left = x + 'px'; t.style.top = y + 'px';
+    fxLayer.appendChild(t);
+    const dx = to.left + to.width / 2 - x, dy = to.top + to.height / 2 - y;
+    t.animate([
+      { transform: 'translate(-50%,-50%) scale(.6)', opacity: 0 },
+      { transform: `translate(calc(-50% + ${dx * 0.2}px), calc(-50% + ${dy * 0.2 - 50}px)) scale(1.4)`, opacity: 1, offset: 0.3 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.7)`, opacity: 0.9 },
+    ], { duration: 800, easing: 'cubic-bezier(.4,0,.6,1)' }).onfinish = () => { t.remove(); pill.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 250 }); };
+    sound('buy');
   }
 
   function triggerCombo() {
@@ -383,6 +439,10 @@
     if (kind === true) kind = 'big';
     if (kind) el.classList.add(kind);
     fxLayer.appendChild(el);
+    // keep long messages fully on screen (they're centred on x)
+    const half = el.offsetWidth / 2 + 8;
+    if (half * 2 < innerWidth) el.style.left = Math.min(Math.max(parseFloat(el.style.left), half), innerWidth - half) + 'px';
+    else { el.style.whiteSpace = 'normal'; el.style.width = (innerWidth - 16) + 'px'; el.style.left = innerWidth / 2 + 'px'; el.style.textAlign = 'center'; }
     setTimeout(() => el.remove(), kind ? 2300 : 1200);
   }
 
@@ -515,17 +575,18 @@
   function spawnBurst(forceCake = false) {
     if (burst) return;
     const life = C.burstLifetime * burstLifeMult();
-    const cake = forceCake || (eventOn && Math.random() < EV.cakeChance);
+    const cake = forceCake || (bdayOn && Math.random() < SD.cakeChance);
+    const tot = !cake && eventOn;                                   // Trick-or-Treat Burst
     const b = document.createElement('button');
-    b.className = 'burst' + (cake ? ' cake' : '');
+    b.className = 'burst' + (cake ? ' cake' : '') + (tot ? ' tot' : '');
     if (cake) b.style.backgroundImage = `url("${window.KICONS.uri('cake')}")`;
-    b.setAttribute('aria-label', cake ? 'Birthday Cake! Click it!' : 'Nightmare Burst! Click it!');
+    b.setAttribute('aria-label', cake ? 'Birthday Cake! Click it!' : tot ? 'Trick-or-Treat Burst! Click it!' : 'Nightmare Burst! Click it!');
     b.style.setProperty('--life', life + 's');
     b.style.left = rand(24, Math.max(40, innerWidth - 100)) + 'px';
     b.style.top = rand(80, Math.max(100, innerHeight - (innerWidth <= 800 ? 170 : 100))) + 'px';
     b.addEventListener('click', clickBurst);
     $('#burst-layer').appendChild(b);
-    burst = { el: b, left: life, cake };
+    burst = { el: b, left: life, cake, tot };
     sound('whoosh');
   }
 
@@ -536,12 +597,32 @@
     state.burstTimer = burstDelay();
   }
 
-  function addBuff(type, duration) {
+  function addBuff(type, duration, extra = {}) {
     const existing = state.buffs.find(b => b.type === type);
-    if (existing) { existing.left = duration; existing.total = duration; }
-    else state.buffs.push({ type, left: duration, total: duration });
+    if (existing) Object.assign(existing, { left: duration, total: duration }, extra);
+    else state.buffs.push({ type, left: duration, total: duration, ...extra });
     dirty = true; ui.buffKey = null;
   }
+
+  // Normal burst rewards; `boost` stretches buffs / payouts (Treat outcome = ×1.5).
+  function burstReward(boost) {
+    const total = C.frenzy.weight + C.lucky.weight + C.mischief.weight;
+    let roll = Math.random() * total;
+    if ((roll -= C.frenzy.weight) < 0) {
+      const d = C.frenzy.duration * buffDurMult() * boost;
+      addBuff('frenzy', d);
+      return `Frenzy! ×${C.frenzy.mult} production for ${Math.round(d)}s`;
+    }
+    if ((roll -= C.lucky.weight) < 0) {
+      const gain = (Math.min(state.kuromis * C.lucky.bankPct, cache.cpsNoBuff * C.lucky.cpsSeconds) + C.lucky.flat) * boost;
+      earn(gain);
+      return `Lucky! +${fmt(gain)} Kuromis`;
+    }
+    const d = C.mischief.duration * buffDurMult() * boost;
+    addBuff('mischief', d);
+    return `Mischief Click! ×${C.mischief.mult} click power for ${Math.round(d)}s`;
+  }
+  const TRICKS = { shuffle: 'The building list shuffled itself!', spooky: 'Your numbers went spooky!', flip: 'Kuromi flipped upside-down!' };
 
   function clickBurst(e) {
     e.stopPropagation();
@@ -550,25 +631,27 @@
     if (dirty) recalc();
     const r = burst.el.getBoundingClientRect();
     const x = r.left + r.width / 2, y = r.top + r.height / 2;
-    const total = C.frenzy.weight + C.lucky.weight + C.mischief.weight;
-    let roll = Math.random() * total, msg;
+    let msg;
     if (burst.cake) {
       const d = EV.cake.duration * buffDurMult();
       addBuff('cake', d);
       state.event.cakes++;
       msg = `🎂 Birthday Cake! ×${EV.cake.mult} production for ${Math.round(d)}s`;
-    } else if ((roll -= C.frenzy.weight) < 0) {
-      const d = C.frenzy.duration * buffDurMult();
-      addBuff('frenzy', d);
-      msg = `Frenzy! ×${C.frenzy.mult} production for ${Math.round(d)}s`;
-    } else if ((roll -= C.lucky.weight) < 0) {
-      const gain = Math.min(state.kuromis * C.lucky.bankPct, cache.cpsNoBuff * C.lucky.cpsSeconds) + C.lucky.flat;
-      earn(gain);
-      msg = `Lucky! +${fmt(gain)} Kuromis`;
+    } else if (burst.tot) {
+      const [lo, hi] = EV.burst.treats;
+      const treats = lo + Math.floor(Math.random() * (hi - lo + 1));
+      gainTreats(treats, x, y);
+      state.event.tbursts++;
+      if (Math.random() < EV.burst.treatChance) {
+        msg = `🍬 Treat! +${treats} Treats · ` + burstReward(EV.burst.treatBoost);
+      } else {
+        const kind = EV.trick.kinds[Math.floor(Math.random() * EV.trick.kinds.length)];
+        addBuff('trick', EV.trick.duration, { kind });
+        state.event.tricked++;
+        msg = `🙃 Trick! ${TRICKS[kind]} (+${treats} Treats, still ×${EV.trick.prodMult} production)`;
+      }
     } else {
-      const d = C.mischief.duration * buffDurMult();
-      addBuff('mischief', d);
-      msg = `Mischief Click! ×${C.mischief.mult} click power for ${Math.round(d)}s`;
+      msg = burstReward(1);
     }
     state.burstsClicked++;
     floater(x, y, msg, 'big');
@@ -592,7 +675,14 @@
       case 'bursts': return state.burstsClicked >= q.n;
       case 'prestige': return state.prestiges >= q.n;
       case 'title': return state.titleClicks >= 13;
-      case 'halloween': { const d = clock.now(); return d.getMonth() === 9 && d.getDate() === 31; }
+      case 'halloween': return bdayOn;
+      case 'evTreats': return state.event.treatsTotal >= q.n;
+      case 'evBursts': return state.event.tbursts >= q.n;
+      case 'evTricked': return state.event.tricked >= q.n;
+      case 'evCostumes': return COSTUMES.every(c => evOwns(c.id));
+      case 'evBdayCostume': return state.event.bdayCostume;
+      case 'evWish': return evOwns('wish');
+      case 'ev31': return bdayOn && D.BUILDINGS.some(b => state.buildings[b.id] >= 31);
       case 'thirteen': return D.BUILDINGS.every(b => state.buildings[b.id] === 13);
       case 'soldBaku': return state.soldBaku;
       case 'midnight': return clock.now().getHours() === 0;
@@ -723,7 +813,11 @@
     s.upgrades = [...new Set((s.upgrades || []).filter(id => U_BY_ID[id]))];
     s.achievements = [...new Set((s.achievements || []).filter(id => A_BY_ID[id]))];
     s.perks = [...new Set((s.perks || []).filter(id => P_BY_ID[id]))];
-    const BUFF_TYPES = ['frenzy', 'mischief', 'combo', 'cake'];
+    const BUFF_TYPES = ['frenzy', 'mischief', 'combo', 'cake', 'trick', 'sugar', 'haunted'];
+    s.event.owned = [...new Set(Array.isArray(s.event.owned) ? s.event.owned : [])].filter(id => SHOP_BY_ID[id]);
+    if (s.event.costume && !s.event.owned.includes(s.event.costume)) s.event.costume = '';
+    for (const k of ['treats', 'treatsTotal', 'tbursts', 'tricked', 'cakes', 'earned', 'combos']) s.event[k] = Math.max(0, Number(s.event[k]) || 0);
+    if (!['auto', 'on', 'birthday', 'off'].includes(s.settings.eventOverride)) s.settings.eventOverride = 'auto';
     s.buffs = Array.isArray(s.buffs) ? s.buffs.filter(b => b && BUFF_TYPES.includes(b.type) && b.left > 0) : [];
     s.skinsUnlocked = [...new Set(['default', ...(Array.isArray(s.skinsUnlocked) ? s.skinsUnlocked : [])])].filter(id => SKIN_BY_ID[id]);
     for (const k of ['sfxVolume', 'musicVolume']) { const v = Number(s.settings[k]); s.settings[k] = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : base.settings[k]; }
@@ -790,12 +884,15 @@
     const capHours = C.offlineCapHours + (hasPerk('long_naps') ? 16 : 0);
     const secs = Math.min(away, capHours * 3600);
     const gain = cache.cpsNoBuff * secs * C.offlineEfficiency;
-    if (gain <= 0) return;
+    const treats = eventOn ? Math.min(EV.currency.offlineCap, Math.floor(secs / 3600 * EV.currency.offlinePerHour)) : 0;
+    if (gain <= 0 && treats <= 0) return;
     earn(gain);
+    if (treats) gainTreats(treats);
     openModal({
       title: 'Welcome back, brat!', narrow: true,
       html: `<p>While you were away, Baku collected</p>
              <div class="big-number"><span class="skull-ico"></span> ${fmt(gain)} Kuromis</div>
+             ${treats ? `<p style="text-align:center">…and found <b>${treats} ${EV.currency.icon} Treats</b> in a pumpkin.</p>` : ''}
              <p class="muted small">Away for ${fmtTime(away)} · ${Math.round(C.offlineEfficiency * 100)}% efficiency · capped at ${capHours}h${away > secs ? ' (cap reached!)' : ''}</p>`,
       actions: [{ label: 'Gimme', cls: 'pink', close: true }],
     });
@@ -949,6 +1046,7 @@
     el.lair.innerHTML = '';
     buildStore();
     applyTheme();
+    if (typeof applyCosmetics === 'function' && state) { applyCosmetics(); updateEvent(true); }
   }
 
   function buildStore() {
@@ -1095,22 +1193,49 @@
     fitLair();
   }
 
+  // Costume overlays (accessories only — drawn over your image), bat cursor, spooky ticker font.
+  function applyCosmetics() {
+    const c = SHOP_BY_ID[state.event.costume];
+    const art = c ? `<img class="cos-${c.id.split('_')[1]}" src="${window.KICONS.uri(c.art)}" alt="" draggable="false">` : '';
+    $('#costume-back').innerHTML = c && c.id === 'costume_wings' ? art : '';
+    $('#costume-front').innerHTML = c && c.id !== 'costume_wings' ? art : '';
+    document.body.classList.toggle('bat-cursor', state.event.batCursor && evOwns('cursor_bat'));
+    $('.ticker').classList.toggle('spooky-font', state.event.tickerFont && evOwns('font_spooky'));
+  }
+  // Tricks: harmless 20s pranks (production still ×3).
+  let trickShown = '';
+  function renderTrick() {
+    const tr = state.buffs.find(b => b.type === 'trick');
+    const kind = tr ? tr.kind : '';
+    if (kind === trickShown) return;
+    if (trickShown === 'shuffle') for (const row of el.store.children) row.style.order = '';
+    trickShown = kind;
+    document.body.dataset.trick = kind;
+    if (kind === 'shuffle') {
+      const order = [...el.store.children].map((_, i) => i).sort(() => Math.random() - 0.5);
+      [...el.store.children].forEach((row, i) => { row.style.order = order[i]; });
+    }
+  }
+
   const BUFF_INFO = {
     frenzy: () => `Frenzy · ×${C.frenzy.mult} production`,
     mischief: () => `Mischief Click · ×${C.mischief.mult} clicks`,
     combo: () => `Combo · ×${C.combo.mult} clicks`,
     cake: () => `🎂 Birthday Cake · ×${EV.cake.mult} production`,
+    trick: b => `🙃 Trick: ${TRICKS[b.kind] || 'Pranked!'} · ×${EV.trick.prodMult} production`,
+    sugar: () => `🍭 Sugar Rush · ×${SHOP_BY_ID.boost_sugar.mult} clicks`,
+    haunted: () => `👻 Haunted Lair · +${Math.round((SHOP_BY_ID.boost_haunted.mult - 1) * 100)}% production`,
   };
   function renderBuffs() {
-    const key = state.buffs.map(b => b.type).join(',');
+    const key = state.buffs.map(b => b.type + (b.kind || '')).join(',');
     if (key !== ui.buffKey) {
       ui.buffKey = key;
-      el.buffs.innerHTML = state.buffs.map(b => `<div class="buff" data-type="${b.type}"><span class="t"></span>${BUFF_INFO[b.type]()}<div class="bar"></div></div>`).join('');
+      el.buffs.innerHTML = state.buffs.map(b => `<div class="buff" data-type="${b.type}"><span class="t"></span>${BUFF_INFO[b.type](b)}<div class="bar"></div></div>`).join('');
     }
     state.buffs.forEach((b, i) => {
       const row = el.buffs.children[i];
       if (!row) return;
-      row.querySelector('.t').textContent = Math.ceil(b.left) + 's';
+      row.querySelector('.t').textContent = b.left >= 60 ? fmtTime(b.left) : Math.ceil(b.left) + 's';
       row.querySelector('.bar').style.width = (100 * b.left / b.total) + '%';
     });
   }
@@ -1157,7 +1282,7 @@
   function newsPool() {
     const unlocked = D.NEWS.filter(([m]) => state.allTimeEarned >= m).map(x => x[1]).reverse(); // newest first
     const pool = [...unlocked];
-    if (eventOn) pool.unshift(...D.NEWS_EVENT);
+    if (eventOn) pool.unshift(...EV.news);
     for (const [bid, t] of D.NEWS_DYNAMIC) if (state.buildings[bid] > 0) pool.push(t.replace('{n}', fmt(state.buildings[bid])));
     return { pool, unlocked: unlocked.length };
   }
@@ -1187,10 +1312,12 @@
   /* ---------- Skins ---------- */
   function skinUnlocked(sk) {
     if (!sk.unlock) return true;
+    if (sk.unlock.shop) return evOwns(sk.unlock.shop);
     return (sk.unlock.perk && hasPerk(sk.unlock.perk)) || (sk.unlock.ach && owned.ach.size >= sk.unlock.ach) || false;
   }
   function skinReq(sk) {
     const bits = [];
+    if (sk.unlock.shop) return 'the event shop';
     if (sk.unlock.ach) bits.push(`${sk.unlock.ach} achievements`);
     if (sk.unlock.perk) bits.push('the Dream Shop');
     return bits.join(' or ');
@@ -1245,6 +1372,9 @@
         <div class="tt-body">${u.desc}</div>
         <div class="tt-flavour">"${esc(u.flavour)}"</div>`;
     }
+    if (kind === 'treats') {
+      return `<div class="tt-name">${EV.currency.icon} ${fmt(state.event.treats)} ${EV.currency.name}</div><div class="tt-body">Event currency: spend it in the ${esc(EV.name)} shop (tap the banner).</div>`;
+    }
     if (kind === 'gift') {
       const ready = giftReady();
       const next = ready ? (state.daily.last === dayKey(new Date(clock.now().getFullYear(), clock.now().getMonth(), clock.now().getDate() - 1)) ? state.daily.streak + 1 : 1) : state.daily.streak;
@@ -1255,7 +1385,7 @@
     if (kind === 'ach') {
       const a = A_BY_ID[id];
       const got = owned.ach.has(id);
-      const limited = a.limited && !got ? `<div class="tt-flavour">Limited: only during ${esc(EV.name)} (Oct 24 – Nov 2).</div>` : '';
+      const limited = a.limited && !got ? `<div class="tt-flavour">${EV.icon} Limited: only during ${esc(EV.name)} (Oct ${EV.start[1]} – Nov ${EV.end[1]}).</div>` : '';
       return `<div class="tt-name">${got ? esc(a.name) : '???'}</div><div class="tt-tag">${esc(a.group)} · ${got ? 'unlocked' : 'locked'}</div><div class="tt-body">${a.desc}</div>${limited}`;
     }
     return '';
@@ -1370,6 +1500,7 @@
       ['Best Kuromis per second', fmt(state.bestCps, 1)],
       ['Daily gift streak', `${state.daily.streak} day${state.daily.streak === 1 ? '' : 's'} · ${state.daily.claims} opened`],
       ['Time played', fmtTime(state.timePlayed)],
+      ...(hasEventStuff() ? [[`${EV.currency.name} (now / all time)`, `${fmt(state.event.treats)} / ${fmt(state.event.treatsTotal)}`]] : []),
       ['This run', fmtTime((Date.now() - state.runStartedAt) / 1000)],
       ['Since you started', fmtTime((Date.now() - state.startedAt) / 1000)],
     ];
@@ -1480,6 +1611,85 @@
     openModal({ title: 'Dream Shop', html: dreamShopHTML(), onMount: mount });
   }
 
+  /* ---------- Event panel + Treat shop ---------- */
+  function buyShopItem(id) {
+    const it = SHOP_BY_ID[id];
+    if (!it || !eventOn || state.event.treats < it.cost) return false;
+    if (it.kind === 'boost') {
+      if (hasBuff(it.buff)) return false;                    // one of each at a time
+      addBuff(it.buff, it.duration);
+    } else {
+      if (evOwns(id)) return false;
+      state.event.owned.push(id);
+      if (it.kind === 'costume') state.event.costume = id;  // wear it right away
+      if (it.kind === 'font') state.event.tickerFont = true;
+      if (it.kind === 'cursor') state.event.batCursor = true;
+      if (it.kind === 'skin') { checkSkins(); setSkin(it.skin); }
+    }
+    state.event.treats -= it.cost;
+    $('#treats').textContent = fmt(state.event.treats);
+    dirty = true;
+    applyCosmetics();
+    sound('buy'); confetti();
+    checkAchievements();
+    save();
+    return true;
+  }
+  function wearCostume(id) {
+    if (id && !evOwns(id)) return false;
+    state.event.costume = id || '';
+    applyCosmetics();
+    save();
+    return true;
+  }
+  function eventPanelHTML() {
+    const t = state.event.treats, on = eventOn;
+    const end = eventEndsAt(), left = end ? (end - clock.now()) / 1000 : 0;
+    const preview = on && state.settings.eventOverride !== 'auto' && !inEventWindow(clock.now());
+    const status = preview
+      ? `${bdayOn ? `${SD.icon} <b>${SD.name}</b> preview. ` : ''}<b>Preview mode</b> (debug toggle). The real event runs Oct ${EV.start[1]} – Nov ${EV.end[1]}.`
+      : on
+      ? `${bdayOn ? `${SD.icon} <b>${SD.name}!</b> ×${SD.treatDropMult} Treats and Birthday Cakes today. · ` : ''}Ends in <b>${left > 86400 ? `${Math.floor(left / 86400)}d ${Math.floor(left % 86400 / 3600)}h` : fmtTime(left)}</b>`
+      : `The event is over. Your Treats, cosmetics and achievements are saved for next year (Oct ${EV.start[1]} – Nov ${EV.end[1]}). The shop is browse-only until then.`;
+    const btn = it => {
+      const owns = it.kind !== 'boost' && evOwns(it.id);
+      if (it.kind === 'costume' && owns) return state.event.costume === it.id
+        ? `<button class="sticker" data-wear="">Take off</button>` : `<button class="sticker pink" data-wear="${it.id}">Wear</button>`;
+      if (it.kind === 'font' && owns) return `<button class="sticker ${state.event.tickerFont ? '' : 'pink'}" data-toggle="tickerFont">${state.event.tickerFont ? 'On' : 'Off'}</button>`;
+      if (it.kind === 'cursor' && owns) return `<button class="sticker ${state.event.batCursor ? '' : 'pink'}" data-toggle="batCursor">${state.event.batCursor ? 'On' : 'Off'}</button>`;
+      if (owns) return `<button class="sticker" disabled>Owned</button>`;
+      const active = it.kind === 'boost' && state.buffs.find(b => b.type === it.buff);
+      if (active) return `<button class="sticker" disabled>Active · ${fmtTime(active.left)}</button>`;
+      return `<button class="sticker pink" data-buy="${it.id}" ${!on || t < it.cost ? 'disabled' : ''}>🍬 ${fmt(it.cost)}</button>`;
+    };
+    const card = it => `<div class="shop-item ${it.kind !== 'boost' && evOwns(it.id) ? 'owned' : ''}">
+        <div class="si-ico">${it.art ? `<img src="${window.KICONS.uri(it.art)}" alt="">` : it.icon}</div>
+        <div><div class="si-name">${esc(it.name)}${it.kind !== 'boost' && evOwns(it.id) ? ' <span class="si-owned">Owned</span>' : ''}</div><div class="si-desc">${it.desc}</div></div>
+        ${btn(it)}</div>`;
+    const group = (title, kinds) => `<h3>${title}</h3><div class="shop-grid">${EV.shop.filter(i => kinds.includes(i.kind)).map(card).join('')}</div>`;
+    return `<p class="event-status">${status}</p>
+      <div class="treat-balance">${EV.currency.icon} <b>${fmt(t)}</b> ${EV.currency.name} <span class="muted small">· ${fmt(state.event.treatsTotal)} collected all-time</span></div>
+      <p class="muted small">Treats drop from ~${Math.round(EV.currency.dropChance * 100)}% of clicks and from Trick-or-Treat Bursts (orange). A Trick is a harmless 20s prank that still pays ×${EV.trick.prodMult} production.</p>
+      ${group('Costumes', ['costume'])}
+      ${group('Boosts (one of each at a time)', ['boost'])}
+      ${group('Cosmetics & the big wish', ['skin', 'font', 'cursor', 'upgrade'])}
+      <h3>Event stats</h3>
+      <div class="stat-grid">
+        <div class="k">Trick-or-Treat Bursts</div><div class="v">${state.event.tbursts}</div>
+        <div class="k">Times tricked</div><div class="v">${state.event.tricked}</div>
+        <div class="k">Birthday Cakes</div><div class="v">${state.event.cakes}</div>
+      </div>`;
+  }
+  function openEvent() {
+    const mount = root => {
+      const redraw = () => { root.querySelector('.modal-body').innerHTML = eventPanelHTML(); mount(root); };
+      root.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => { if (buyShopItem(b.dataset.buy)) redraw(); }));
+      root.querySelectorAll('[data-wear]').forEach(b => b.addEventListener('click', () => { wearCostume(b.dataset.wear); redraw(); }));
+      root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => { state.event[b.dataset.toggle] = !state.event[b.dataset.toggle]; applyCosmetics(); save(); redraw(); }));
+    };
+    openModal({ title: `${EV.icon} ${EV.name}`, html: eventPanelHTML(), onMount: mount });
+  }
+
   /* ---------- Prestige confirm ---------- */
   function openPrestige() {
     if (!canWake()) { openDreamShop(); return; }
@@ -1518,7 +1728,7 @@
     const s = state.settings;
     const sw = (key, label) => `<label class="setting-row"><span>${label}</span><span class="switch"><input type="checkbox" data-set="${key}" ${s[key] ? 'checked' : ''}><span></span></span></label>`;
     const slider = (key, label) => `<label class="setting-row"><span>${label}</span><input type="range" min="0" max="1" step="0.05" data-set="${key}" value="${s[key]}" aria-label="${label}"></label>`;
-    const skins = D.SKINS.map(sk => {
+    const skins = D.SKINS.filter(sk => !sk.event || skinUnlocked(sk) || eventOn).map(sk => {
       const open = skinUnlocked(sk), on = document.body.dataset.theme === sk.id;
       return `<button class="skin-btn ${on ? 'on' : ''}" data-skin="${sk.id}" ${open ? '' : 'disabled'} aria-pressed="${on}">
         <span class="skin-swatch">${sk.preview.map(c => `<i style="background:${c}"></i>`).join('')}</span>
@@ -1627,11 +1837,12 @@
       ['Next click = CRIT', () => { state.clicksTotal = Math.ceil((state.clicksTotal + 1) / C.crit.every) * C.crit.every - 1; }],
       ['Skip a day', () => { clock.offset += 864e5; toast('Debug', 'Tomorrow already?', dayKey(clock.now())); }],
       ['Event: auto', b => {
-        const order = ['auto', 'on', 'off'];
-        state.settings.eventOverride = order[(order.indexOf(state.settings.eventOverride) + 1) % 3];
+        const order = ['auto', 'on', 'birthday', 'off']; // auto = device date · on = force event · birthday = force Birthday Day
+        state.settings.eventOverride = order[(order.indexOf(state.settings.eventOverride) + 1) % order.length];
         b.textContent = 'Event: ' + state.settings.eventOverride;
-        updateEvent();
+        updateEvent(true);
       }],
+      ['+100 Treats', () => { gainTreats(100); }],
       ['Unlock all', () => { D.ACHIEVEMENTS.forEach(a => award(a, true)); D.BUILDINGS.forEach(b => { state.revealed[b.id] = true; }); toast('Debug', 'Unlocked everything', 'All achievements & buildings revealed.'); }],
       ['Fake 1h away', () => {
         save();
@@ -1714,7 +1925,7 @@
     $$('#amount-seg .seg-btn').forEach(x => x.classList.toggle('active', x === b));
     renderStore();
   });
-  const OPENERS = { stats: () => openStats(), achievements: () => openAchievements(), dreamshop: () => openDreamShop(), settings: () => openSettings(), prestige: () => openPrestige() };
+  const OPENERS = { event: () => openEvent(), stats: () => openStats(), achievements: () => openAchievements(), dreamshop: () => openDreamShop(), settings: () => openSettings(), prestige: () => openPrestige() };
   $$('[data-open]').forEach(b => b.addEventListener('click', () => { sync(); if (dirty) recalc(); OPENERS[b.dataset.open](); }));
 
   window.addEventListener('beforeunload', () => save());
@@ -1725,6 +1936,7 @@
   });
   // Browsers only allow audio after a gesture: start saved-on music at the first tap/click.
   document.addEventListener('pointerdown', () => { if (state.settings.music) startMusic(); }, { once: true, capture: true });
+  $('#event-banner').addEventListener('click', () => { sync(); openEvent(); });
   $('#gift-btn').addEventListener('click', () => {
     if (giftReady()) claimDaily();
     else toast('Daily gift', 'Already opened today', `Next gift in ${fmtTime(secsToTomorrow())}. Streak: ${state.daily.streak} day${state.daily.streak === 1 ? '' : 's'}.`);
@@ -1752,6 +1964,7 @@
     renderBuffs();
     renderCombo();
     renderFrenzyFx(shown.t);
+    renderTrick();
     requestAnimationFrame(frame);
   }
 
@@ -1847,7 +2060,7 @@
   const giftReady = () => state.daily.last !== dayKey(clock.now());
   function dailyReward(streak) {
     const mult = 1 + C.daily.streakBonus * (Math.min(streak, C.daily.maxStreak) - 1);
-    return Math.max(C.daily.minReward, cache.cpsNoBuff * C.daily.minutes * 60) * mult;
+    return Math.max(C.daily.minReward, cache.cpsNoBuff * C.daily.minutes * 60) * mult * (bdayOn ? SD.giftMult : 1);
   }
   function claimDaily() {
     if (!giftReady()) return 0;
@@ -1858,14 +2071,16 @@
     const reward = dailyReward(streak);
     earn(reward);
     state.daily = { last: dayKey(today), streak, claims: state.daily.claims + 1 };
+    if (bdayOn) gainTreats(SD.giftTreats);
     renderGift();
     const days = Array.from({ length: C.daily.maxStreak }, (_, i) =>
       `<span class="streak-dot ${i < Math.min(streak, C.daily.maxStreak) ? 'on' : ''}">${i + 1}</span>`).join('');
     const bonus = Math.round(C.daily.streakBonus * (Math.min(streak, C.daily.maxStreak) - 1) * 100);
     openModal({
-      title: '🎁 Daily gift!', narrow: true,
-      html: `<p>Baku dragged in a present. It's slightly chewed.</p>
+      title: bdayOn ? '🎂 Birthday gift!' : '🎁 Daily gift!', narrow: true,
+      html: `<p>${bdayOn ? `A birthday present! ×${SD.giftMult} the usual, plus Treats.` : "Baku dragged in a present. It's slightly chewed."}</p>
         <div class="big-number"><span class="skull-ico"></span> +${fmt(reward)} Kuromis</div>
+        ${bdayOn ? `<div class="big-number">+${SD.giftTreats} ${EV.currency.icon}</div>` : ''}
         <div class="streak">${days}</div>
         <p class="muted small" style="text-align:center">Day ${streak} streak${bonus ? ` · +${bonus}% streak bonus` : ''} · worth ${C.daily.minutes} minutes of production. Come back tomorrow!</p>`,
       actions: [{ label: 'Mine!', cls: 'pink', close: true }],
@@ -1877,35 +2092,64 @@
   }
 
   /* ---------- Birthday event overlay ---------- */
-  function updateEvent() {
-    const on = eventActive();
-    if (on === eventOn && document.body.classList.contains('event-halloween') === on) return;
-    eventOn = on;
+  function updateEvent(force = false) {
+    const on = eventActive(), bday = on && onSpecialDay();
+    for (const t of $$('.event-trigger')) t.hidden = !(on || hasEventStuff());
+    if (!force && on === eventOn && bday === bdayOn && document.body.classList.contains('event-halloween') === on) { renderEventBanner(); return; }
+    eventOn = on; bdayOn = bday;
     document.body.classList.toggle('event-halloween', on);
+    document.body.classList.toggle('event-bday', bday);
     $('#event-banner').hidden = !on;
-    fitLair();
+    $('#treats-pill').hidden = !on;
+    $('#treats').textContent = fmt(state.event.treats);
+    renderEventBanner();
+    // a few slow bats + tiny pumpkins drifting in the background
     const layer = $('#event-layer');
     layer.innerHTML = '';
     if (on) {
-      for (let i = 0; i < 16; i++) {
-        const d = document.createElement('div');
+      EV.decor.forEach((id, i) => {
+        const d = document.createElement('img');
         d.className = 'event-item';
-        d.textContent = EV.decor[i % EV.decor.length];
-        d.style.left = rand(1, 96) + 'vw';
-        d.style.animationDelay = -rand(0, 26) + 's';
-        d.style.animationDuration = rand(18, 30) + 's';
-        d.style.fontSize = rand(18, 30) + 'px';
+        d.src = window.KICONS.uri(id); d.alt = '';
+        d.style.top = rand(8, 88) + 'vh';
+        d.style.width = (id === 'ev_bat' ? rand(26, 38) : rand(18, 26)) + 'px';
+        d.style.animationDuration = rand(55, 90) + 's';
+        d.style.animationDelay = -rand(0, 90) + 's';
+        if (i % 2) d.style.animationDirection = 'reverse';
         layer.appendChild(d);
+      });
+      if (!state.event.played) { state.event.played = true; toast('Event', EV.name + '!', 'Treats 🍬 drop from clicks and Trick-or-Treat Bursts. Tap the banner to shop.'); }
+      if (bday && state.event.greeted !== dayKey(clock.now())) {
+        state.event.greeted = dayKey(clock.now());
+        setTimeout(() => {
+          confetti(); confetti(); sound('fanfare');
+          const html = `<div class="bday-hero">🎂</div><p style="text-align:center">It's Kuromi's birthday! All day: <b>×${SD.treatDropMult} Treats</b>, Birthday Cake bursts (×${EV.cake.mult} production), and a <b>special birthday gift</b>.</p>`;
+          if (!modal) openModal({ title: 'Happy Birthday, Kuromi!', narrow: true, html, actions: [{ label: 'Party time', cls: 'pink', close: true }] });
+          else toast(SD.name, 'Happy Birthday, Kuromi!', `×${SD.treatDropMult} Treats and Birthday Cakes all day!`);
+        }, 400);
       }
-      if (!state.event.played) { state.event.played = true; toast('Event', EV.name + '!', 'Birthday Cake bursts give ×13 production. Limited achievements are live.'); }
     }
+    fitLair();
+    checkTicker();
   }
+  function renderEventBanner() {
+    if (!eventOn) return;
+    const end = eventEndsAt(), left = end ? (end - clock.now()) / 1000 : 0;
+    const preview = state.settings.eventOverride !== 'auto' && !inEventWindow(clock.now());
+    const when = left > 86400 ? `${Math.floor(left / 86400)}d ${Math.floor(left % 86400 / 3600)}h` : fmtTime(left);
+    $('#event-banner-text').textContent = bdayOn
+      ? `${SD.icon} ${SD.name}! ×${SD.treatDropMult} Treats & Birthday Cakes · ${EV.name}${preview ? ' (preview)' : `, ends in ${when}`}`
+      : `${EV.icon} ${EV.name}${preview ? ' (preview)' : `, ends in ${when}`}`;
+  }
+
 
   let slowTicks = 0;
   function slowTick() {
     sync();
     if (dirty) recalc();
     if (slowTicks % 10 === 0) updateEvent();
+    else if (slowTicks % 5 === 0) renderEventBanner();
+    if (bdayOn && state.event.costume) state.event.bdayCostume = true;
     if (cache.cps > state.bestCps) state.bestCps = cache.cps;
     sampleCps();
     renderGift();
@@ -2030,7 +2274,8 @@
     syncSets();
     checkSkins(true);
     applyTheme();
-    updateEvent();
+    updateEvent(true);
+    applyCosmetics();
     initSparkles();
     buildStore();
     recalc();
@@ -2058,6 +2303,7 @@
     buyBuilding, sellBuilding, buyUpgrade, clickKuromi, spawnBurst, wakeUp, exportSave, importSave, shardsPending, checkAchievements,
     setSpeed: s => { debugSpeed = s; },
     goalList, renderGoals, buildTicker, fitLair,
+    gainTreats, buyShopItem, wearCostume, openEvent, onSpecialDay, eventEndsAt, get eventState() { return { on: eventOn, bday: bdayOn }; },
     get combo() { return combo; }, set combo(v) { combo = v; }, advanceCombo: dt => { combo = Math.max(0, combo - C.combo.decayPerSec * dt); },
     clock, dayKey, inEventWindow, eventActive, updateEvent, claimDaily, giftReady, dailyReward,
     skinUnlocked: id => skinUnlocked(SKIN_BY_ID[id]), setSkin, checkSkins, placeTip,

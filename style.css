@@ -173,8 +173,21 @@ b { color: var(--bubblegum); }
   touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
 .kuromi-btn:focus-visible { outline: 3px dashed var(--hot-pink); outline-offset: 6px; border-radius: 50%; }
-.kuromi-btn img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0,0,0,.5)); pointer-events: none; transition: filter .2s;
-  transform-origin: 50% 90%; animation: idle 5.2s ease-in-out infinite; }
+.kuromi-flip, .kuromi-figure { position: relative; display: block; width: 100%; height: 100%; pointer-events: none; }
+.kuromi-flip { transition: transform .5s cubic-bezier(.3,1.4,.5,1); }
+.kuromi-figure { transform-origin: 50% 90%; animation: idle 5.2s ease-in-out infinite; }
+.kuromi-btn img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(0,0,0,.5)); pointer-events: none; transition: filter .2s; }
+.kuromi-figure > #kuromi-img { position: relative; z-index: 1; }
+.kuromi-figure > .placeholder { position: relative; z-index: 1; }
+/* costume accessories: positioned over the (untouched) character image */
+.costume { position: absolute; inset: 0; pointer-events: none; }
+.costume-back { z-index: 0; }
+.costume-front { z-index: 2; }
+.costume img { position: absolute; height: auto; filter: drop-shadow(0 3px 4px rgba(0,0,0,.45)); }
+.costume img.cos-hat    { width: 40%; left: 28%; top: 3%; transform: rotate(-8deg); }
+.costume img.cos-crown  { width: 30%; left: 33%; top: 16%; transform: rotate(-4deg); }
+.costume img.cos-bucket { width: 26%; left: 8%;  top: 64%; transform: rotate(-10deg); }
+.costume img.cos-wings  { width: 112%; left: -6%; top: 26%; opacity: .95; }
 /* idle: slow breathing + a gentle wobble */
 @keyframes idle {
   0%, 100% { transform: rotate(-1.6deg) scale(1, 1); }
@@ -543,21 +556,81 @@ body.frenzy .vignette { opacity: 1; animation: vignettePulse 2.4s ease-in-out in
 .streak-dot { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel-border); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 13px; color: var(--text-muted); }
 .streak-dot.on { background: var(--hot-pink); border-color: var(--bubblegum); color: #2a0b1c; font-weight: 700; }
 
-/* ---------- Birthday event ---------- */
-#event-layer { position: fixed; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; } /* above panels, but faint and click-through */
-.event-item { position: absolute; top: -40px; opacity: .3; animation: fallDown linear infinite; filter: saturate(.85); }
-@keyframes fallDown { from { transform: translateY(0) rotate(-15deg); } to { transform: translateY(110vh) rotate(25deg); } }
-body.event-halloween .panel { border-color: #ffb36b; }
-body.event-halloween .panel::before { border-color: rgba(255,179,107,.35); }
-body.event-halloween .topbar::after { background: repeating-conic-gradient(#0d0712 0 25%, #ff8c3a 0 50%) 0 0 / 16px 16px; }
-.event-banner {
-  flex: none; margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; font-family: var(--font-display); font-size: 14px;
-  background: linear-gradient(90deg, rgba(255,140,58,.25), rgba(255,95,174,.25)); border: 2px dashed #ffb36b;
+/* ---------- Limited event: Kuromi's Birthday Nightmare (layered on top of any skin) ---------- */
+#event-layer { position: fixed; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; } /* above panels, faint, click-through */
+.event-item { position: absolute; left: 0; opacity: .28; animation: driftAcross linear infinite; filter: saturate(.9); }
+@keyframes driftAcross {
+  0%   { transform: translate(-12vw, 0) rotate(-6deg); }
+  25%  { transform: translate(22vw, -18px) rotate(4deg); }
+  50%  { transform: translate(52vw, 10px) rotate(-3deg); }
+  75%  { transform: translate(82vw, -14px) rotate(5deg); }
+  100% { transform: translate(112vw, 0) rotate(-6deg); }
 }
-.event-banner b { color: #ffd0a0; }
+.event-edge { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .8s;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(139,92,246,.16) 80%, rgba(255,138,43,.26) 100%); }
+body.event-halloween .event-edge { opacity: 1; }
+body.event-halloween .panel::before { border-color: rgba(255,160,80,.6); }            /* orange stitching */
+body.event-halloween .topbar::after { background: repeating-conic-gradient(#0d0712 0 25%, #ff8c3a 0 50%) 0 0 / 16px 16px; }
+body.event-halloween .section-title::before { filter: hue-rotate(-40deg) saturate(1.3); }
+/* candle-flicker glow behind the character */
+body.event-halloween .spotlight { background: radial-gradient(circle, rgba(255,160,70,.42) 0%, rgba(255,95,174,.24) 38%, rgba(139,92,246,.16) 55%, transparent 70%);
+  animation: glow 4s ease-in-out infinite, candle 2.3s steps(1) infinite; }
+@keyframes candle { 0% { opacity: 1; } 13% { opacity: .82; } 21% { opacity: .96; } 34% { opacity: .78; } 47% { opacity: 1; } 63% { opacity: .88; } 79% { opacity: .97; } 88% { opacity: .8; } }
+
+.event-banner {
+  display: block; width: calc(100% - 32px); margin: 8px 16px 0; padding: 7px 14px; min-height: 36px; cursor: pointer;
+  position: relative; z-index: 4; border-radius: 12px; font-family: var(--font-display); font-weight: 600; font-size: 15px; color: #fff4e6;
+  background: linear-gradient(90deg, rgba(139,92,246,.45), rgba(255,138,43,.5) 50%, rgba(139,92,246,.45)); border: 2px dashed #ffb36b;
+  box-shadow: 0 3px 0 #0d0712, 0 0 16px rgba(255,138,43,.25); text-align: center;
+}
+.event-banner:hover { box-shadow: 0 3px 0 #0d0712, 0 0 22px rgba(255,138,43,.5); }
 .event-banner[hidden] { display: none; }
+body.event-halloween .columns { height: calc(100vh - 62px - 44px); }
+body.event-bday .event-banner { background: linear-gradient(90deg, rgba(255,95,174,.55), rgba(255,138,43,.6), rgba(255,95,174,.55)); }
+
+.treats-pill { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 13px;
+  background: rgba(255,138,43,.18); border: 1.5px solid #ffb36b; color: #ffe0c2; vertical-align: 1px; }
+.treats-pill[hidden] { display: none; }
+.treats-pill b { color: #fff; }
+.treat-fly { position: absolute; font-size: 22px; pointer-events: none; z-index: 31; }
+
 .burst.cake { filter: drop-shadow(0 0 10px #ffb36b) drop-shadow(0 0 22px var(--hot-pink)); }
+.burst.tot { filter: hue-rotate(58deg) saturate(1.35) drop-shadow(0 0 10px #ff8a2b) drop-shadow(0 0 24px #ff8a2b); } /* pink skull → orange */
+.ach { position: relative; }
 .ach.limited { border-color: #ffb36b; }
+.ach.limited::after { content: '🎃'; position: absolute; top: -6px; right: -6px; font-size: 13px; filter: none; }
+
+/* tricks (20s, harmless) */
+body[data-trick="flip"] .kuromi-flip { transform: rotate(180deg); }
+body[data-trick="spooky"] #bank, body[data-trick="spooky"] #cps, body[data-trick="spooky"] #click-power,
+body[data-trick="spooky"] .b-cost-v, body[data-trick="spooky"] .b-owned, body[data-trick="spooky"] .u-cost {
+  font-family: var(--font-gothic); color: #b6ff9e; letter-spacing: .5px; text-shadow: 0 0 8px rgba(120,255,120,.5);
+}
+/* cosmetics */
+.ticker.spooky-font .tk-item { font-family: var(--font-gothic); font-size: 16px; letter-spacing: .5px; color: #ffc48a; }
+body.bat-cursor, body.bat-cursor .kuromi-btn { cursor: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2732%27 height=%2722%27 viewBox=%270 0 64 40%27%3E%3Cpath d=%27M32 14c-3-6-9-8-14-6 2 2 2 5 0 7-4-3-10-3-14 1 5 1 8 5 8 10 4-3 9-3 12 0 2-3 5-5 8-5s6 2 8 5c3-3 8-3 12 0 0-5 3-9 8-10-4-4-10-4-14-1-2-2-2-5 0-7-5-2-11 0-14 6z%27 fill=%27%233a1f4d%27 stroke=%27%23fff%27 stroke-width=%273%27 stroke-linejoin=%27round%27/%3E%3Ccircle cx=%2728.5%27 cy=%2718%27 r=%272%27 fill=%27%23ffb36b%27/%3E%3Ccircle cx=%2735.5%27 cy=%2718%27 r=%272%27 fill=%27%23ffb36b%27/%3E%3C/svg%3E") 16 11, pointer; }
+
+/* event panel */
+.event-status { margin-top: 0; }
+.treat-balance { font-family: var(--font-display); font-size: 22px; margin: 6px 0; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.shop-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 14px; background: #140a1c; border: 2px dashed var(--panel-border); }
+.shop-item.owned { border-style: solid; border-color: #ffb36b; }
+.si-ico { width: 44px; height: 44px; font-size: 28px; display: flex; align-items: center; justify-content: center; }
+.si-ico img { width: 100%; height: 100%; object-fit: contain; }
+.si-name { font-family: var(--font-display); font-weight: 600; }
+.si-owned { font-size: 11px; color: #ffb36b; border: 1px solid #ffb36b; border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+.si-desc { font-size: 12px; color: var(--text-muted); }
+.shop-item .sticker { padding: 6px 10px; white-space: nowrap; }
+.bday-hero { font-size: 64px; text-align: center; line-height: 1; }
+
+/* Event skin: Pumpkin Punk */
+body[data-theme="pumpkin"] {
+  --bg-deep: #140b10; --bg-panel: #24121c; --panel-border: #5a2a3c;
+  --purple: #a855f7; --lavender: #ffb36b; --hot-pink: #ff8a2b; --bubblegum: #ffd0a0;
+  --text: #fff4ea; --text-muted: #d8b49c; --glow: 0 0 18px rgba(255,138,43,.35);
+}
+
 
 /* ---------- Icons in tooltips / achievements ---------- */
 .tt-ico { display: inline-block; width: 22px; height: 22px; vertical-align: -5px; margin-right: 6px; }
@@ -604,6 +677,10 @@ body[data-theme="goth"] .sticker.pink, body[data-theme="goth"] .gift-badge.ready
   body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
   .topbar { display: none; }
   .m-only { display: flex; }
+  .event-banner { width: calc(100% - 24px); margin: calc(6px + env(safe-area-inset-top)) 12px 6px; font-size: 13px; min-height: 44px; }
+  body.event-halloween .columns { height: auto; }
+  .shop-grid { grid-template-columns: 1fr; }
+  .shop-item .sticker { min-height: 44px; }
   .columns { display: block; height: auto; min-height: 0; padding: 0 0 12px; }
   .columns > .panel { margin: 12px max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); overflow: visible; }
   .panel:hover { box-shadow: 0 6px 24px rgba(0,0,0,.35); }
@@ -635,7 +712,7 @@ body[data-theme="goth"] .sticker.pink, body[data-theme="goth"] .gift-badge.ready
   .spotlight { width: min(68vw, 280px); }
   .click-power { margin-top: 0; }
   .buff { font-size: 12px; }
-  .kuromi-btn img { animation-duration: 6s; }
+  .kuromi-figure { animation-duration: 6s; }
   .gift-badge { height: 40px; min-width: 44px; justify-content: center; }
   .combo { max-width: none; }
   body.head-compact .combo { grid-area: combo; }
@@ -739,7 +816,7 @@ body[data-theme="goth"] .sticker.pink, body[data-theme="goth"] .gift-badge.ready
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
-  .sparkle, .decor-item { display: none; }
+  .sparkle, .decor-item, .event-item { display: none; }
   .ticker-track { animation: none !important; }
   .burst { animation: none !important; opacity: 1; }
 }

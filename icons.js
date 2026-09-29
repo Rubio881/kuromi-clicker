@@ -21,6 +21,8 @@ window.KICONS = (() => {
     <ellipse cx="${x + 9}" cy="${y + 4}" rx="2.6" ry="1.6" fill="${K}" opacity=".7"/>`;
 
   const svg = body => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${body}</svg>`;
+  const svgV = (vb, body) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}">${body}</svg>`;
+  const OR = '#ff8a2b', OR2 = '#ffb36b';
 
   const ICONS = {
     // pencil + scribbled note
@@ -208,6 +210,43 @@ window.KICONS = (() => {
       <path d="M32 14c-10 0-17 7-17 16 0 5 2.5 9.5 6.5 12v5.5c0 1.7 1.3 3 3 3h15c1.7 0 3-1.3 3-3V42c4-2.5 6.5-7 6.5-12 0-9-7-16-17-16z" fill="${W}" ${S()}/>
       <circle cx="25.5" cy="31" r="4.2" fill="${O}"/><circle cx="38.5" cy="31" r="4.2" fill="${O}"/>
       <path d="M32 36 l-2.4 4.4 h4.8z" fill="${O}"/>`),
+
+    /* ---------- Event: decor ---------- */
+    ev_bat: svgV('0 0 64 40', `
+      <path d="M32 14c-3-6-9-8-14-6 2 2 2 5 0 7-4-3-10-3-14 1 5 1 8 5 8 10 4-3 9-3 12 0 2-3 5-5 8-5s6 2 8 5c3-3 8-3 12 0 0-5 3-9 8-10-4-4-10-4-14-1-2-2-2-5 0-7-5-2-11 0-14 6z" fill="#3a1f4d" ${S(2.4)}/>
+      <circle cx="28.5" cy="18" r="1.6" fill="${OR2}"/><circle cx="35.5" cy="18" r="1.6" fill="${OR2}"/>`),
+    ev_pumpkin: svg(`
+      <path d="M32 18c-2-5 0-9 4-11" stroke="${O}" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M32 18c-2-5 0-9 4-11" stroke="${L}" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <ellipse cx="32" cy="38" rx="25" ry="19" fill="${OR}" ${S()}/>
+      <path d="M22 21c-6 8-6 26 0 34M42 21c6 8 6 26 0 34M32 19v38" stroke="${O}" stroke-width="2.4" fill="none" opacity=".45"/>
+      <path d="M21 33l5-5 5 5zM33 33l5-5 5 5z" fill="${O}"/>
+      <path d="M22 43q10 7 20 0" stroke="${O}" stroke-width="3" fill="none" stroke-linecap="round"/>`),
+
+    /* ---------- Event: costume accessories (drawn over your character image, never the character) ---------- */
+    cos_hat: svgV('0 0 100 80', `
+      <path d="M54 4 C44 18 40 34 34 54 L72 54 C66 40 64 26 70 12 C66 14 60 10 54 4z" fill="#3a1f4d" ${S(4)}/>
+      <path d="M36 48 L70 48" stroke="${OR}" stroke-width="7" stroke-linecap="round"/>
+      <rect x="49" y="42" width="11" height="11" rx="2" fill="${OR2}" ${S(2.6)}/>
+      <ellipse cx="53" cy="58" rx="46" ry="11" fill="#3a1f4d" ${S(4)}/>
+      <path d="M72 26 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" fill="${B}" ${S(1.6)}/>`),
+    cos_bucket: svgV('0 0 64 64', `
+      <path d="M14 26c0-16 36-16 36 0" stroke="${O}" stroke-width="7" fill="none"/>
+      <path d="M14 26c0-16 36-16 36 0" stroke="${L}" stroke-width="3" fill="none"/>
+      <path d="M8 30h48l-5 26a4 4 0 0 1-4 3H17a4 4 0 0 1-4-3z" fill="${OR}" ${S()}/>
+      <path d="M20 40l5-5 5 5zM34 40l5-5 5 5z" fill="${O}"/>
+      <path d="M22 49q10 6 20 0" stroke="${O}" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <circle cx="22" cy="28" r="4" fill="${K}" ${S(2)}/><circle cx="34" cy="26" r="4" fill="${B}" ${S(2)}/><circle cx="45" cy="28" r="3.5" fill="${L}" ${S(2)}/>`),
+    cos_wings: svgV('0 0 200 100', `
+      <path d="M100 50 C84 20 52 8 14 14 C24 22 26 30 22 40 C32 38 40 42 42 52 C52 48 60 52 64 62 C74 56 86 58 100 66z" fill="#3a1f4d" ${S(4)}/>
+      <path d="M100 50 C116 20 148 8 186 14 C176 22 174 30 178 40 C168 38 160 42 158 52 C148 48 140 52 136 62 C126 56 114 58 100 66z" fill="#3a1f4d" ${S(4)}/>
+      <path d="M100 52 C82 32 58 24 34 24 M100 52 C118 32 142 24 166 24" stroke="${P}" stroke-width="3" fill="none" opacity=".8"/>`),
+    cos_crown: svgV('0 0 100 56', `
+      <path d="M8 50 L14 14 L32 34 L50 6 L68 34 L86 14 L92 50z" fill="#fff4d6" ${S(4)}/>
+      <path d="M11 38 L89 38 L92 50 L8 50z" fill="${OR}"/>
+      <path d="M13 26 L30 40 L50 18 L70 40 L87 26 L89 38 L11 38z" fill="#ffd36e"/>
+      <path d="M8 50 L14 14 L32 34 L50 6 L68 34 L86 14 L92 50z" fill="none" ${S(4)}/>
+      <circle cx="50" cy="44" r="4" fill="${K}" ${S(2)}/>`),
 
     /* ---------- Small corner badges ---------- */
     b_click: svg(`<path d="M16 8 L50 34 L35 36 L44 54 L36 58 L27 40 L16 50z" fill="${W}" ${S(4)}/>`),
