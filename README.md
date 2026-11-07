@@ -22,10 +22,17 @@ It uses plain HTML, CSS and vanilla JavaScript. Google Fonts load from the web, 
   - **Birthday Day:** confetti, ×2 Treats, Birthday Cake bursts (×13 for 31s), and a ×3 birthday gift with 31 Treats.
   - 15 limited 🎃 achievements and 15 event headlines.
   - Outside the dates everything event-related is hidden, but Treats, cosmetics and achievements stay in your save, and the shop stays browsable.
-- **Skins:** Midnight Purple, Bubblegum Punk (30 achievements or Dream Shop) and Monochrome Goth (60 achievements or Dream Shop). Pick one in Settings → Skins.
+- **Kuromi's Naughty Winter (Dec 18 – Jan 6; Christmas Day Dec 25; New Year's Dec 31 – Jan 1):**
+  - An icy blue→purple theme with slowly falling snowflakes and stars, and twinkling fairy-light stitching.
+  - **Snowflakes ❄️** drop from clicks. **Present Bursts** (gift boxes) give Snowflakes plus *Nice!* (a boosted reward) or *Naughty!* (a harmless 20s prank: the list gets re-wrapped, the numbers freeze, or Kuromi slips on the ice; it still pays ×3).
+  - The shop has Hot Cocoa and Cozy Lair boosts, costumes (Santa hat, striped scarf, reindeer antlers, New Year party hat), the Frostbite Punk skin, a festive ticker font, a snowflake cursor, and the **New Year's Resolution** (+5% forever, stacks with the Birthday Wish).
+  - **Christmas Day:** Golden Present bursts (×12 for 25s), ×2 Snowflakes, and a ×3 Christmas gift with 25 Snowflakes. **New Year's:** Firework bursts (×20 for 20s), ×2 Snowflakes, and a ×3 gift with 20 Snowflakes. Each special day greets you once with confetti.
+  - 14 limited ❄️ achievements (one is hidden) and 15 winter headlines.
+- **How events work:** each event's progress and currency is saved separately and kept between years. Costumes, skins, fonts and cursors you own work all year, from any event. The Event panel has a tab per event, and only the running event's shop is buyable.
+- **Skins:** Midnight Purple, Bubblegum Punk (30 achievements or Dream Shop) and Monochrome Goth (60 achievements or Dream Shop), plus the event skins Pumpkin Punk and Frostbite Punk. Pick one in Settings → Skins.
 - **Sound:** generated effects plus an optional chiptune loop (music box + soft bass), with separate volume sliders. Music is off by default.
 - **Stats:** time played, best Kuromis/sec, total clicks, bursts, and a graph of Kuromis/sec over the last 10 minutes.
-- **137 achievements:** 112 core, 20 for the newer systems, and 5 limited event ones.
+- **160 achievements:** 117 core plus 43 for the newer systems and the two events (15 Halloween, 14 winter).
 
 ## Phone & installing as an app
 
@@ -74,7 +81,8 @@ If an image is missing, the character becomes a purple placeholder circle and bu
 | `style.css` | Theme. The palette is in `:root` CSS variables, the unlockable theme in `body[data-theme="bubblegum"]` |
 | `data.js` | **All balance numbers and content**: buildings, upgrades, achievements, perks, news, combo/crit/daily numbers, events, skins, music notes |
 | `icons.js` | Original SVG icons in one style (thick outline, purple/pink): buildings, upgrade art (`up_*`) and small corner badges (`b_*`). A PNG in `assets/icons/<id>.png` replaces the matching building icon |
-| `game.js` | Engine: production formula, game loop, UI, save system, phone tabs, PWA registration |
+| `game.js` | Engine: production formula, game loop, UI, save system, events, phone tabs, PWA registration |
+| `tests/` | Local Playwright tests (`node tests/core.js`, `node tests/events.js`, `node tests/verify.js <url>`). Git-ignored, never published |
 | `sw.js` | Service worker: offline cache (bump `CACHE_VERSION` to ship updates) |
 | `manifest.webmanifest`, `app-icons/` | Install info and icons |
 
@@ -88,7 +96,7 @@ If an image is missing, the character becomes a purple placeholder circle and bu
 - **`DREAM_PERKS`**: prestige shop items, bought with Dream Shards.
 - **`NEWS`** / **`NEWS_DYNAMIC`** / **`DECOR_MILESTONES`**: ticker headlines and background decorations, each gated by all-time Kuromis. `NEWS_EVENT` adds headlines during the birthday event.
 - **`CONFIG.crit`, `CONFIG.combo`, `CONFIG.daily`**: CRIT frequency and multiplier; combo fill per click, decay per second, multiplier and duration; daily gift minutes, streak bonus and cap.
-- **`EVENT`**: one reusable block holding everything for the event: dates (`start`/`end`, `[month, day]`), the special day and its bonuses, Treat drop and offline rates, Trick-or-Treat odds, trick duration and payout, the shop items (cost, kind, effect), decor and headlines. Copy it for a future event.
+- **`EVENTS`**: a list of event blocks (Halloween, Naughty Winter), all the same shape. Add a new event by copying one. Each block holds dates (`start`/`end`, `[month, day]`), the special day and its bonuses, Treat drop and offline rates, Trick-or-Treat odds, trick duration and payout, the shop items (cost, kind, effect), decor and headlines. Copy it for a future event.
 - **`SKINS`**: each skin's unlock rule (`ach` count and/or Dream Shop `perk`) and its preview colours. The colours themselves live in `style.css` (`body[data-theme="…"]`).
 - **Upgrade art:** each upgrade in `data.js` has an `icon` (an `up_*` id from `icons.js`) and `badges`: the building ids it boosts, or `b_click` / `b_all` / `b_trophy` / `b_burst`. Tier upgrades take their art from `TIERS.icons`.
 - **`CONFIG.lairRowCap`, `tickerSpeed`, `goalsShown`**: icons per lair row, ticker speed in px/s, and how many Next goals to show.
@@ -115,5 +123,5 @@ total = Σ(base × count × tierMult × synergyMult)
 
 ## Debug panel
 
-Press **D three times** quickly. It gives you: add Kuromis, ×100 speed, spawn a Nightmare Burst or Birthday Cake, Frenzy, fill combo, next click = CRIT, skip a day (for the daily gift), **Event: auto → on → birthday → off** (preview the event or Birthday Day any time), +100 Treats, unlock all, fake 1h away (to test the offline modal), and reset.
+Press **D three times** quickly. It gives you: add Kuromis, ×100 speed, spawn a Nightmare Burst or Birthday Cake, Frenzy, fill combo, next click = CRIT, skip a day (for the daily gift), **Event:** cycles auto → Halloween → Birthday Day → Naughty Winter → Christmas Day → New Year's → off (preview any event or special day; set it back to *auto* afterwards), +100 Treats, unlock all, fake 1h away (to test the offline modal), and reset.
 The browser console also exposes `window.KG` for poking at the game.

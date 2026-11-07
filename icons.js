@@ -248,6 +248,58 @@ window.KICONS = (() => {
       <path d="M8 50 L14 14 L32 34 L50 6 L68 34 L86 14 L92 50z" fill="none" ${S(4)}/>
       <circle cx="50" cy="44" r="4" fill="${K}" ${S(2)}/>`),
 
+    /* ---------- Winter event ---------- */
+    ev_snowflake: svg(`
+      <g stroke="${O}" stroke-width="7" stroke-linecap="round"><path d="M32 6v52M9.5 19l45 26M9.5 45l45-26"/></g>
+      <g stroke="#e0f2fe" stroke-width="3.5" stroke-linecap="round"><path d="M32 6v52M9.5 19l45 26M9.5 45l45-26"/>
+        <path d="M26 10l6 6 6-6M26 54l6-6 6 6M10 27l8 1-3 7M54 37l-8-1 3-7M10 37l8-1-3-7M54 27l-8 1 3 7"/></g>
+      <circle cx="32" cy="32" r="5" fill="#a5d8ff" ${S(2.5)}/>`),
+    ev_star: svg(`<path d="M32 4 l6 20 20 2 -15 13 5 20 -16 -11 -16 11 5 -20 -15 -13 20 -2z" fill="#ffe38a" ${S(3)}/>`),
+    ev_present: svg(`
+      <rect x="9" y="26" width="46" height="31" rx="5" fill="${K}" ${S()}/>
+      <rect x="6" y="18" width="52" height="11" rx="4" fill="${P}" ${S()}/>
+      <rect x="28" y="18" width="8" height="39" fill="#e0f2fe" ${S(2.6)}/>
+      <path d="M32 18c-6-10-17-10-15-3 1 4 9 4 15 3zM32 18c6-10 17-10 15-3-1 4-9 4-15 3z" fill="#e0f2fe" ${S(3)}/>
+      ${face(20, 42)}`),
+    ev_goldpresent: svg(`
+      <rect x="9" y="26" width="46" height="31" rx="5" fill="#ffd36e" ${S()}/>
+      <rect x="6" y="18" width="52" height="11" rx="4" fill="#ffb347" ${S()}/>
+      <rect x="28" y="18" width="8" height="39" fill="${K}" ${S(2.6)}/>
+      <path d="M32 18c-6-10-17-10-15-3 1 4 9 4 15 3zM32 18c6-10 17-10 15-3-1 4-9 4-15 3z" fill="${K}" ${S(3)}/>
+      <path d="M52 4 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z M10 6 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5z" fill="#fff4d6" ${S(1.8)}/>`),
+    ev_firework: svg(`
+      <g stroke-width="4" stroke-linecap="round">
+        <path d="M32 30 L32 8M32 30 L50 14M32 30 L56 30M32 30 L50 46M32 30 L14 46M32 30 L8 30M32 30 L14 14" stroke="${O}" stroke-width="8"/>
+        <path d="M32 30 L32 8M32 30 L50 46M32 30 L8 30" stroke="${K}"/>
+        <path d="M32 30 L50 14M32 30 L14 46" stroke="#ffd36e"/>
+        <path d="M32 30 L56 30M32 30 L14 14" stroke="#7dd3fc"/></g>
+      <circle cx="32" cy="30" r="6" fill="#fff4d6" ${S(3)}/>
+      <path d="M30 40 L30 60 L34 60 L34 40" fill="${P}" ${S(2.4)}/>`),
+    cos_santa: svgV('0 0 100 80', `
+      <path d="M14 58 C20 30 40 10 66 14 C80 16 88 26 90 40 C80 34 72 34 66 38 C70 44 74 50 76 58z" fill="#e2384f" ${S(4)}/>
+      <circle cx="90" cy="44" r="9" fill="#fff8f0" ${S(3.4)}/>
+      <rect x="6" y="54" width="78" height="17" rx="8.5" fill="#fff8f0" ${S(4)}/>
+      <path d="M22 62h4M38 62h4M54 62h4" stroke="#e8dcd0" stroke-width="3" stroke-linecap="round"/>`),
+    cos_scarf: svgV('0 0 100 70', `
+      <path d="M8 22 C30 34 70 34 92 22 L92 38 C70 50 30 50 8 38z" fill="${P}" ${S(4)}/>
+      <path d="M22 30v14M36 34v14M50 35v14M64 34v14M78 30v14" stroke="${K}" stroke-width="6"/>
+      <path d="M62 40 L70 68 L84 64 L76 38z" fill="${P}" ${S(3.6)}/>
+      <path d="M66 50l12-3M69 59l12-3" stroke="${K}" stroke-width="5"/>
+      <path d="M70 68l-2 5M76 66l0 6M82 64l2 5" stroke="${O}" stroke-width="2.6" stroke-linecap="round"/>`),
+    cos_antlers: svgV('0 0 140 70', `
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M44 66 C40 48 30 34 16 26 M34 44 C26 42 18 46 12 52 M28 34 C30 24 26 14 18 8" stroke="${O}" stroke-width="11"/>
+        <path d="M96 66 C100 48 110 34 124 26 M106 44 C114 42 122 46 128 52 M112 34 C110 24 114 14 122 8" stroke="${O}" stroke-width="11"/>
+        <path d="M44 66 C40 48 30 34 16 26 M34 44 C26 42 18 46 12 52 M28 34 C30 24 26 14 18 8" stroke="#a9744f" stroke-width="6"/>
+        <path d="M96 66 C100 48 110 34 124 26 M106 44 C114 42 122 46 128 52 M112 34 C110 24 114 14 122 8" stroke="#a9744f" stroke-width="6"/></g>
+      <circle cx="38" cy="56" r="5" fill="#ffd36e" ${S(2.4)}/><circle cx="102" cy="56" r="5" fill="#ffd36e" ${S(2.4)}/>`),
+    cos_partyhat: svgV('0 0 64 80', `
+      <path d="M32 6 L54 70 L10 70z" fill="${P}" ${S(4)}/>
+      <path d="M22 42 L42 42 M17 56 L47 56 M27 28 L37 28" stroke="#ffd36e" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="32" cy="7" r="6" fill="${K}" ${S(3)}/>
+      <ellipse cx="32" cy="71" rx="25" ry="5" fill="${B}" ${S(3)}/>
+      <path d="M48 14 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5z" fill="#fff4d6" ${S(1.6)}/>`),
+
     /* ---------- Small corner badges ---------- */
     b_click: svg(`<path d="M16 8 L50 34 L35 36 L44 54 L36 58 L27 40 L16 50z" fill="${W}" ${S(4)}/>`),
     b_all: svg(`<path d="M32 6l7.6 15.4 17 2.5-12.3 12 2.9 16.9L32 44.8 16.8 52.8l2.9-16.9L7.4 23.9l17-2.5z" fill="${B}" ${S(4)}/>`),

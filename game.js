@@ -86,12 +86,8 @@
       soldBaku: false,
       combos: 0, crits: 0,
       daily: { last: '', streak: 0, claims: 0 },   // last = local 'YYYY-MM-DD' of the last gift opened
-      event: {
-        cakes: 0, earned: 0, combos: 0, played: false,
-        treats: 0, treatsTotal: 0, tbursts: 0, tricked: 0,   // Treats 🍬 (kept in the save between years)
-        owned: [], costume: '', tickerFont: false, batCursor: false, // shop purchases + what's equipped
-        greeted: '', bdayCostume: false,
-      },
+      events: Object.fromEntries(D.EVENTS.map(e => [e.id, freshEventState()])), // per-event progress, kept between years
+      cos: { costume: '', font: '', cursor: '' },  // equipped event cosmetics (from any event you own them from)
       timePlayed: 0, bestCps: 0,
       statsOpened: false, musicPlayed: false,
       skinsUnlocked: ['default'],
@@ -100,6 +96,15 @@
         music: false, sfxVolume: C.audio.sfxVolume, musicVolume: C.audio.musicVolume, eventOverride: 'auto',
       },
       startedAt: now, runStartedAt: now, lastSaved: now,
+    };
+  }
+
+  function freshEventState() {
+    return {
+      treats: 0, treatsTotal: 0,                 // the event's currency (Treats, Snowflakes, …)
+      tbursts: 0, tricked: 0, cakes: 0, bigKinds: {}, // event bursts, tricks, special-day big bursts (by kind)
+      earned: 0, combos: 0, played: false, greeted: '', specialCostume: {},
+      owned: [],
     };
   }
 
@@ -119,12 +124,13 @@
     let m = 1;
     for (const bf of state.buffs) {
       if (kind === 'prod' && bf.type === 'frenzy') m *= C.frenzy.mult;
-      if (kind === 'prod' && bf.type === 'cake') m *= EV.cake.mult;
+      if (kind === 'prod' && bf.type === 'cake') m *= EV_BY_ID.halloween.specialDays[0].bigBurst.mult;
+      if (kind === 'prod' && bf.type === 'big') m *= bf.mult || 1;
       if (kind === 'click' && bf.type === 'mischief') m *= C.mischief.mult;
       if (kind === 'click' && bf.type === 'combo') m *= C.combo.mult;
-      if (kind === 'prod' && bf.type === 'trick') m *= EV.trick.prodMult;
-      if (kind === 'prod' && bf.type === 'haunted') m *= SHOP_BY_ID.boost_haunted.mult;
-      if (kind === 'click' && bf.type === 'sugar') m *= SHOP_BY_ID.boost_sugar.mult;
+      if (kind === 'prod' && bf.type === 'trick') m *= bf.mult || EV.trick.prodMult;
+      const boost = BOOST_BY_BUFF[bf.type];
+      if (boost && boost.target === kind) m *= boost.mult;
     }
     return m;
   }
@@ -165,7 +171,7 @@
     const pinkyMult = 1 + owned.ach.size * pinkyBonus;
     const shardMult = 1 + state.shardsEarned * C.shardBonus;
     const prodBuff = buffMult('prod');
-    const wishMult = 1 + (evOwns('wish') ? SHOP_BY_ID.wish.pct : 0);
+    const wishMult = 1 + ALL_SHOP.reduce((t, i) => t + (i.kind === 'upgrade' && evOwns(i.id) ? i.pct : 0), 0); // Birthday Wish, Resolution…
     const allNoBuff = globalMult * pinkyMult * shardMult * wishMult;
     const all = allNoBuff * prodBuff;
 
@@ -198,51 +204,62 @@
     state.kuromis += x;
     state.runEarned += x;
     state.allTimeEarned += x;
-    if (eventOn) state.event.earned += x;
+    if (eventOn) ES().earned += x;
   }
 
   /* =====================================================================
      Calendar: daily gift + limited events use the device's local date.
      `clock.offset` lets the debug panel / tests pretend it's another day.
      ===================================================================== */
-  const EV = D.EVENT, SD = D.EVENT.specialDay;
-  const SHOP_BY_ID = byId(EV.shop);
-  const COSTUMES = EV.shop.filter(i => i.kind === 'costume');
+  const EV_BY_ID = byId(D.EVENTS);
+  const ALL_SHOP = D.EVENTS.flatMap(e => e.shop.map(i => ({ ...i, ev: e.id })));   // shop ids are unique across events
+  const SHOP_BY_ID = byId(ALL_SHOP);
+  const BOOST_BY_BUFF = Object.fromEntries(ALL_SHOP.filter(i => i.kind === 'boost').map(i => [i.buff, i]));
+  const costumesOf = ev => ev.shop.filter(i => i.kind === 'costume');
+  let EV = D.EVENTS[0], SD = null;   // the running event + its special day (EV stays on the last event when none runs)
   const clock = { offset: 0, now: () => new Date(Date.now() + clock.offset) };
   const pad2 = n => String(n).padStart(2, '0');
   const dayKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  function inEventWindow(d, ev = EV) {
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fmtMD = ([m, d]) => `${MONTHS[m - 1]} ${d}`;
+  const eventDates = ev => `${fmtMD(ev.start)} – ${fmtMD(ev.end)}`;
+  function inEventWindow(d, ev = D.EVENTS[0]) {
     const v = (d.getMonth() + 1) * 100 + d.getDate();
     const a = ev.start[0] * 100 + ev.start[1], b = ev.end[0] * 100 + ev.end[1];
     return a <= b ? v >= a && v <= b : v >= a || v <= b; // handles windows that wrap past New Year
   }
-  // eventOverride (debug panel): 'auto' (device date) · 'on' (event, not Birthday Day) · 'birthday' · 'off'
-  function eventActive() {
-    const o = state.settings.eventOverride;
-    if (o === 'on' || o === 'birthday') return true;
-    if (o === 'off') return false;
-    return inEventWindow(clock.now());
-  }
-  function onSpecialDay() {
-    const o = state.settings.eventOverride;
-    if (o === 'birthday') return true;
-    if (o === 'on' || o === 'off') return false;
+  // eventOverride (debug panel): 'auto' (device date) · '<eventId>' · '<eventId>:<specialDayId>' · 'off'.
+  // Older saves used 'on' (= Halloween) and 'birthday' (= Halloween's Birthday Day).
+  const normOverride = o => (o === 'on' ? 'halloween' : o === 'birthday' ? 'halloween:birthday' : o || 'auto');
+  const specialDayOn = (ev, d) => ev.specialDays.find(sd => sd.dates.some(([m, dd]) => d.getMonth() + 1 === m && d.getDate() === dd)) || null;
+  function resolveEvent() {
+    const o = normOverride(state.settings.eventOverride);
+    if (o === 'off') return { ev: null, sd: null };
+    if (o !== 'auto') {
+      const [eid, sid] = o.split(':');
+      const ev = EV_BY_ID[eid];
+      if (ev) return { ev, sd: sid ? ev.specialDays.find(x => x.id === sid) || null : null };
+    }
     const d = clock.now();
-    return inEventWindow(d) && d.getMonth() + 1 === SD.date[0] && d.getDate() === SD.date[1];
+    const ev = D.EVENTS.find(e => inEventWindow(d, e)) || null;
+    return { ev, sd: ev ? specialDayOn(ev, d) : null };
   }
-  // When does the current (or next) event window end? Local midnight after the last day.
-  function eventEndsAt() {
+  const eventActive = () => !!resolveEvent().ev;
+  const onSpecialDay = () => !!resolveEvent().sd;
+  // When does the current (or next) window of an event end? Local midnight after its last day.
+  function eventEndsAt(ev = EV) {
     const n = clock.now();
     for (const y of [n.getFullYear() - 1, n.getFullYear(), n.getFullYear() + 1]) {
-      const endYear = EV.end[0] < EV.start[0] ? y + 1 : y;
-      const end = new Date(endYear, EV.end[0] - 1, EV.end[1] + 1);
+      const endYear = ev.end[0] < ev.start[0] ? y + 1 : y;
+      const end = new Date(endYear, ev.end[0] - 1, ev.end[1] + 1);
       if (end > n) return end;
     }
     return null;
   }
-  const evOwns = id => state.event.owned.includes(id);
-  const hasEventStuff = () => state.event.treatsTotal > 0 || state.event.owned.length > 0;
-  let eventOn = false, bdayOn = false; // cached each slow tick
+  const ES = () => state.events[EV.id];                       // progress for the running/shown event
+  const evOwns = id => { const it = SHOP_BY_ID[id]; return !!it && state.events[it.ev].owned.includes(id); };
+  const hasEventStuff = id => (id ? [id] : D.EVENTS.map(e => e.id)).some(k => state.events[k].treatsTotal > 0 || state.events[k].owned.length > 0);
+  let eventOn = false, bdayOn = false; // cached each slow tick (bdayOn = the running event's special day)
 
   /* =====================================================================
      Time — production uses real elapsed time, so throttled tabs stay correct
@@ -316,7 +333,7 @@
     if (e && (e.clientX || e.clientY)) { x = e.clientX; y = e.clientY; }
     else { const r = kuromiBtn.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 3; }
 
-    if (eventOn && Math.random() < EV.currency.dropChance * (bdayOn ? SD.treatDropMult : 1)) gainTreats(1, x, y);
+    if (eventOn && Math.random() < EV.currency.dropChance * (bdayOn && SD ? SD.dropMult : 1)) gainTreats(1, x, y);
 
     const motionOk = !reducedMotion.matches;
     if (motionOk) {
@@ -341,9 +358,9 @@
   // Treats: count them, and fly a little 🍬 from where it dropped to the counter.
   function gainTreats(n, x, y) {
     if (!(n > 0)) return;
-    state.event.treats += n; state.event.treatsTotal += n;
+    ES().treats += n; ES().treatsTotal += n;
     const pill = $('#treats-pill');
-    $('#treats').textContent = fmt(state.event.treats);
+    $('#treats').textContent = fmt(ES().treats);
     if (x === undefined || pill.hidden || reducedMotion.matches || !state.settings.particles) return;
     const to = pill.getBoundingClientRect();
     const t = document.createElement('div');
@@ -364,7 +381,7 @@
     combo = 0;
     addBuff('combo', C.combo.duration);
     state.combos++;
-    if (eventOn) state.event.combos++;
+    if (eventOn) ES().combos++;
     const r = kuromiBtn.getBoundingClientRect();
     floater(r.left + r.width / 2, r.top + r.height * 0.2, `COMBO! ×${C.combo.mult} clicks`, 'big');
     sound('chime');
@@ -575,18 +592,22 @@
   function spawnBurst(forceCake = false) {
     if (burst) return;
     const life = C.burstLifetime * burstLifeMult();
-    const cake = forceCake || (bdayOn && Math.random() < SD.cakeChance);
-    const tot = !cake && eventOn;                                   // Trick-or-Treat Burst
+    // special-day big burst (Birthday Cake, Golden Present, Firework…), else the event's burst, else a Nightmare Burst
+    const big = forceCake ? (SD || EV.specialDays[0]).bigBurst
+      : bdayOn && SD && SD.bigBurst && Math.random() < SD.bigBurst.chance ? SD.bigBurst : null;
+    const cake = !!big;
+    const tot = !cake && eventOn;
     const b = document.createElement('button');
-    b.className = 'burst' + (cake ? ' cake' : '') + (tot ? ' tot' : '');
-    if (cake) b.style.backgroundImage = `url("${window.KICONS.uri('cake')}")`;
-    b.setAttribute('aria-label', cake ? 'Birthday Cake! Click it!' : tot ? 'Trick-or-Treat Burst! Click it!' : 'Nightmare Burst! Click it!');
+    b.className = 'burst' + (cake ? ` cake big-${big.kind}` : '') + (tot ? ' ' + EV.burst.cls : '');
+    if (cake) b.style.backgroundImage = `url("${window.KICONS.uri(big.icon)}")`;
+    else if (tot && EV.burst.bg) b.style.backgroundImage = `url("${window.KICONS.uri(EV.burst.bg)}")`;
+    b.setAttribute('aria-label', cake ? `${big.name}! Click it!` : tot ? `${EV.burst.name}! Click it!` : 'Nightmare Burst! Click it!');
     b.style.setProperty('--life', life + 's');
     b.style.left = rand(24, Math.max(40, innerWidth - 100)) + 'px';
     b.style.top = rand(80, Math.max(100, innerHeight - (innerWidth <= 800 ? 170 : 100))) + 'px';
     b.addEventListener('click', clickBurst);
     $('#burst-layer').appendChild(b);
-    burst = { el: b, left: life, cake, tot };
+    burst = { el: b, left: life, cake, tot, big };
     sound('whoosh');
   }
 
@@ -622,7 +643,7 @@
     addBuff('mischief', d);
     return `Mischief Click! ×${C.mischief.mult} click power for ${Math.round(d)}s`;
   }
-  const TRICKS = { shuffle: 'The building list shuffled itself!', spooky: 'Your numbers went spooky!', flip: 'Kuromi flipped upside-down!' };
+  const sdOfBig = bb => D.EVENTS.flatMap(e => e.specialDays).find(x => x.bigBurst === bb) || { icon: '✨' };
 
   function clickBurst(e) {
     e.stopPropagation();
@@ -633,22 +654,24 @@
     const x = r.left + r.width / 2, y = r.top + r.height / 2;
     let msg;
     if (burst.cake) {
-      const d = EV.cake.duration * buffDurMult();
-      addBuff('cake', d);
-      state.event.cakes++;
-      msg = `🎂 Birthday Cake! ×${EV.cake.mult} production for ${Math.round(d)}s`;
+      const bb = burst.big, icon = sdOfBig(bb).icon, d = bb.duration * buffDurMult();
+      if (bb.kind === 'cake') addBuff('cake', d);                    // (kept as its own type for older saves)
+      else addBuff('big', d, { mult: bb.mult, label: bb.name, icon });
+      ES().cakes++;
+      ES().bigKinds[bb.kind] = (ES().bigKinds[bb.kind] || 0) + 1;
+      msg = `${icon} ${bb.name}! ×${bb.mult} production for ${Math.round(d)}s`;
     } else if (burst.tot) {
       const [lo, hi] = EV.burst.treats;
       const treats = lo + Math.floor(Math.random() * (hi - lo + 1));
       gainTreats(treats, x, y);
-      state.event.tbursts++;
+      ES().tbursts++;
       if (Math.random() < EV.burst.treatChance) {
-        msg = `🍬 Treat! +${treats} Treats · ` + burstReward(EV.burst.treatBoost);
+        msg = `${EV.burst.good} +${treats} ${EV.currency.name} · ` + burstReward(EV.burst.treatBoost);
       } else {
         const kind = EV.trick.kinds[Math.floor(Math.random() * EV.trick.kinds.length)];
-        addBuff('trick', EV.trick.duration, { kind });
-        state.event.tricked++;
-        msg = `🙃 Trick! ${TRICKS[kind]} (+${treats} Treats, still ×${EV.trick.prodMult} production)`;
+        addBuff('trick', EV.trick.duration, { kind, ev: EV.id, mult: EV.trick.prodMult });
+        ES().tricked++;
+        msg = `${EV.burst.bad} ${EV.trick.labels[kind]} (+${treats} ${EV.currency.name}, still ×${EV.trick.prodMult} production)`;
       }
     } else {
       msg = burstReward(1);
@@ -665,6 +688,9 @@
      ===================================================================== */
   function achMet(a) {
     const q = a.req;
+    const evQ = q.ev ? state.events[q.ev] : null;                 // that event's progress
+    const runQ = !!q.ev && eventOn && EV.id === q.ev;             // …and is it running right now?
+    const dayQ = runQ && bdayOn && !!SD && SD.id === q.day;       // …on that special day?
     switch (q.type) {
       case 'earned': return state.allTimeEarned >= q.n;
       case 'cps': return cache.cps >= q.n;
@@ -675,14 +701,17 @@
       case 'bursts': return state.burstsClicked >= q.n;
       case 'prestige': return state.prestiges >= q.n;
       case 'title': return state.titleClicks >= 13;
-      case 'halloween': return bdayOn;
-      case 'evTreats': return state.event.treatsTotal >= q.n;
-      case 'evBursts': return state.event.tbursts >= q.n;
-      case 'evTricked': return state.event.tricked >= q.n;
-      case 'evCostumes': return COSTUMES.every(c => evOwns(c.id));
-      case 'evBdayCostume': return state.event.bdayCostume;
-      case 'evWish': return evOwns('wish');
-      case 'ev31': return bdayOn && D.BUILDINGS.some(b => state.buildings[b.id] >= 31);
+      // event achievements: `q.ev` names the event; counts persist between years
+      case 'evTreats': return evQ.treatsTotal >= q.n;
+      case 'evBursts': return evQ.tbursts >= q.n;
+      case 'evTricked': return evQ.tricked >= q.n;
+      case 'evCostumes': return costumesOf(EV_BY_ID[q.ev]).every(c => evOwns(c.id));
+      case 'evUpgrade': return EV_BY_ID[q.ev].shop.filter(i => i.kind === 'upgrade').every(i => evOwns(i.id));
+      case 'evSpecialCostume': return !!evQ.specialCostume[q.day];
+      case 'evBigKind': return (evQ.bigKinds[q.kind] || 0) >= q.n;
+      case 'evSpecialPlayed': return dayQ;
+      case 'evSpecialOwn': return dayQ && D.BUILDINGS.some(b => state.buildings[b.id] >= q.n);
+      case 'evNewYearHour': { const d = clock.now(); return runQ && d.getMonth() === 0 && d.getDate() === 1 && d.getHours() === 0; }
       case 'thirteen': return D.BUILDINGS.every(b => state.buildings[b.id] === 13);
       case 'soldBaku': return state.soldBaku;
       case 'midnight': return clock.now().getHours() === 0;
@@ -698,10 +727,10 @@
       case 'sugarHigh': return hasBuff('combo') && (hasBuff('frenzy') || hasBuff('cake'));
       case 'totalBuildings': return D.BUILDINGS.reduce((n, b) => n + state.buildings[b.id], 0) >= q.n;
       // limited event: only while it's running
-      case 'evPlay': return eventOn;
-      case 'evCakes': return eventOn && state.event.cakes >= q.n;
-      case 'evEarned': return eventOn && state.event.earned >= q.n;
-      case 'evCombo': return eventOn && state.event.combos >= 1;
+      case 'evPlay': return runQ;
+      case 'evCakes': return runQ && evQ.cakes >= q.n;
+      case 'evEarned': return runQ && evQ.earned >= q.n;
+      case 'evCombo': return runQ && evQ.combos >= 1;
       default: return false;
     }
   }
@@ -802,7 +831,6 @@
       buildings: { ...base.buildings, ...(obj.buildings || {}) },
       revealed: { ...(obj.revealed || {}) },
       daily: { ...base.daily, ...(obj.daily || {}) },
-      event: { ...base.event, ...(obj.event || {}) },
     };
     for (const k of Object.keys(base)) {
       if (typeof base[k] !== 'number') continue;
@@ -813,11 +841,32 @@
     s.upgrades = [...new Set((s.upgrades || []).filter(id => U_BY_ID[id]))];
     s.achievements = [...new Set((s.achievements || []).filter(id => A_BY_ID[id]))];
     s.perks = [...new Set((s.perks || []).filter(id => P_BY_ID[id]))];
-    const BUFF_TYPES = ['frenzy', 'mischief', 'combo', 'cake', 'trick', 'sugar', 'haunted'];
-    s.event.owned = [...new Set(Array.isArray(s.event.owned) ? s.event.owned : [])].filter(id => SHOP_BY_ID[id]);
-    if (s.event.costume && !s.event.owned.includes(s.event.costume)) s.event.costume = '';
-    for (const k of ['treats', 'treatsTotal', 'tbursts', 'tricked', 'cakes', 'earned', 'combos']) s.event[k] = Math.max(0, Number(s.event[k]) || 0);
-    if (!['auto', 'on', 'birthday', 'off'].includes(s.settings.eventOverride)) s.settings.eventOverride = 'auto';
+    const BUFF_TYPES = ['frenzy', 'mischief', 'combo', 'cake', 'big', 'trick', ...Object.keys(BOOST_BY_BUFF)];
+    // Events: one progress slot per event. Saves from before winter kept Halloween progress in `event`.
+    const legacy = obj.event && typeof obj.event === 'object' ? obj.event : null;
+    s.events = {};
+    for (const e of D.EVENTS) {
+      const fromNew = obj.events && typeof obj.events === 'object' ? obj.events[e.id] : null;
+      const src = fromNew || (e.id === 'halloween' ? legacy : null) || {};
+      const es = { ...freshEventState(), ...src };
+      if (!fromNew && e.id === 'halloween' && legacy && legacy.bdayCostume) es.specialCostume = { birthday: true };
+      es.owned = [...new Set(Array.isArray(es.owned) ? es.owned : [])].filter(id => SHOP_BY_ID[id] && SHOP_BY_ID[id].ev === e.id);
+      for (const k of ['treats', 'treatsTotal', 'tbursts', 'tricked', 'cakes', 'earned', 'combos']) es[k] = Math.max(0, Number(es[k]) || 0);
+      if (!es.bigKinds || typeof es.bigKinds !== 'object') es.bigKinds = {};
+      if (!es.specialCostume || typeof es.specialCostume !== 'object') es.specialCostume = {};
+      for (const k of ['costume', 'tickerFont', 'batCursor', 'bdayCostume']) delete es[k];
+      s.events[e.id] = es;
+    }
+    const cos = { ...base.cos, ...(obj.cos && typeof obj.cos === 'object' ? obj.cos : {}) };
+    if (legacy && !obj.cos) { cos.costume = legacy.costume || ''; cos.font = legacy.tickerFont ? 'font_spooky' : ''; cos.cursor = legacy.batCursor ? 'cursor_bat' : ''; }
+    const ownsIt = id => !!SHOP_BY_ID[id] && s.events[SHOP_BY_ID[id].ev].owned.includes(id);
+    const kindOk = { costume: 'costume', font: 'font', cursor: 'cursor' };
+    for (const k of Object.keys(kindOk)) if (cos[k] && !(ownsIt(cos[k]) && SHOP_BY_ID[cos[k]].kind === kindOk[k])) cos[k] = '';
+    s.cos = cos;
+    delete s.event;
+    const ov = normOverride(s.settings.eventOverride);
+    const [oe, osd] = String(ov).split(':');
+    s.settings.eventOverride = ov === 'auto' || ov === 'off' || (EV_BY_ID[oe] && (!osd || EV_BY_ID[oe].specialDays.some(x => x.id === osd))) ? ov : 'auto';
     s.buffs = Array.isArray(s.buffs) ? s.buffs.filter(b => b && BUFF_TYPES.includes(b.type) && b.left > 0) : [];
     s.skinsUnlocked = [...new Set(['default', ...(Array.isArray(s.skinsUnlocked) ? s.skinsUnlocked : [])])].filter(id => SKIN_BY_ID[id]);
     for (const k of ['sfxVolume', 'musicVolume']) { const v = Number(s.settings[k]); s.settings[k] = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : base.settings[k]; }
@@ -1195,12 +1244,14 @@
 
   // Costume overlays (accessories only — drawn over your image), bat cursor, spooky ticker font.
   function applyCosmetics() {
-    const c = SHOP_BY_ID[state.event.costume];
+    const c = SHOP_BY_ID[state.cos.costume];
     const art = c ? `<img class="cos-${c.id.split('_')[1]}" src="${window.KICONS.uri(c.art)}" alt="" draggable="false">` : '';
-    $('#costume-back').innerHTML = c && c.id === 'costume_wings' ? art : '';
-    $('#costume-front').innerHTML = c && c.id !== 'costume_wings' ? art : '';
-    document.body.classList.toggle('bat-cursor', state.event.batCursor && evOwns('cursor_bat'));
-    $('.ticker').classList.toggle('spooky-font', state.event.tickerFont && evOwns('font_spooky'));
+    $('#costume-back').innerHTML = c && c.layer === 'back' ? art : '';
+    $('#costume-front').innerHTML = c && c.layer !== 'back' ? art : '';
+    for (const it of ALL_SHOP) {
+      if (it.kind === 'font') $('.ticker').classList.toggle(it.cls, state.cos.font === it.id && evOwns(it.id));
+      if (it.kind === 'cursor') document.body.classList.toggle(it.cls, state.cos.cursor === it.id && evOwns(it.id));
+    }
   }
   // Tricks: harmless 20s pranks (production still ×3).
   let trickShown = '';
@@ -1221,11 +1272,12 @@
     frenzy: () => `Frenzy · ×${C.frenzy.mult} production`,
     mischief: () => `Mischief Click · ×${C.mischief.mult} clicks`,
     combo: () => `Combo · ×${C.combo.mult} clicks`,
-    cake: () => `🎂 Birthday Cake · ×${EV.cake.mult} production`,
-    trick: b => `🙃 Trick: ${TRICKS[b.kind] || 'Pranked!'} · ×${EV.trick.prodMult} production`,
-    sugar: () => `🍭 Sugar Rush · ×${SHOP_BY_ID.boost_sugar.mult} clicks`,
-    haunted: () => `👻 Haunted Lair · +${Math.round((SHOP_BY_ID.boost_haunted.mult - 1) * 100)}% production`,
+    cake: () => `🎂 Birthday Cake · ×${EV_BY_ID.halloween.specialDays[0].bigBurst.mult} production`,
+    big: b => `${b.icon || '✨'} ${b.label || 'Special'} · ×${b.mult} production`,
+    trick: b => { const t = (EV_BY_ID[b.ev] || EV).trick; return `${t.badge} ${t.labels[b.kind] || 'Pranked!'} · ×${b.mult || t.prodMult} production`; },
   };
+  for (const it of Object.values(BOOST_BY_BUFF)) BUFF_INFO[it.buff] = () =>
+    `${it.icon} ${it.name} · ${it.target === 'click' ? `×${it.mult} clicks` : `+${Math.round((it.mult - 1) * 100)}% production`}`;
   function renderBuffs() {
     const key = state.buffs.map(b => b.type + (b.kind || '')).join(',');
     if (key !== ui.buffKey) {
@@ -1373,7 +1425,7 @@
         <div class="tt-flavour">"${esc(u.flavour)}"</div>`;
     }
     if (kind === 'treats') {
-      return `<div class="tt-name">${EV.currency.icon} ${fmt(state.event.treats)} ${EV.currency.name}</div><div class="tt-body">Event currency: spend it in the ${esc(EV.name)} shop (tap the banner).</div>`;
+      return `<div class="tt-name">${EV.currency.icon} ${fmt(ES().treats)} ${EV.currency.name}</div><div class="tt-body">Event currency: spend it in the ${esc(EV.name)} shop (tap the banner).</div>`;
     }
     if (kind === 'gift') {
       const ready = giftReady();
@@ -1385,7 +1437,8 @@
     if (kind === 'ach') {
       const a = A_BY_ID[id];
       const got = owned.ach.has(id);
-      const limited = a.limited && !got ? `<div class="tt-flavour">${EV.icon} Limited: only during ${esc(EV.name)} (Oct ${EV.start[1]} – Nov ${EV.end[1]}).</div>` : '';
+      const aev = EV_BY_ID[a.req.ev];
+      const limited = a.limited && !got && aev ? `<div class="tt-flavour">${aev.icon} Limited: only during ${esc(aev.name)} (${eventDates(aev)}).</div>` : '';
       return `<div class="tt-name">${got ? esc(a.name) : '???'}</div><div class="tt-tag">${esc(a.group)} · ${got ? 'unlocked' : 'locked'}</div><div class="tt-body">${a.desc}</div>${limited}`;
     }
     return '';
@@ -1500,7 +1553,7 @@
       ['Best Kuromis per second', fmt(state.bestCps, 1)],
       ['Daily gift streak', `${state.daily.streak} day${state.daily.streak === 1 ? '' : 's'} · ${state.daily.claims} opened`],
       ['Time played', fmtTime(state.timePlayed)],
-      ...(hasEventStuff() ? [[`${EV.currency.name} (now / all time)`, `${fmt(state.event.treats)} / ${fmt(state.event.treatsTotal)}`]] : []),
+      ...D.EVENTS.filter(e => hasEventStuff(e.id)).map(e => [`${e.currency.icon} ${e.currency.name} (now / all time)`, `${fmt(state.events[e.id].treats)} / ${fmt(state.events[e.id].treatsTotal)}`]),
       ['This run', fmtTime((Date.now() - state.runStartedAt) / 1000)],
       ['Since you started', fmtTime((Date.now() - state.startedAt) / 1000)],
     ];
@@ -1565,7 +1618,7 @@
         return `<div class="ach-group-title">${esc(g.name)}</div><div class="icon-grid">${shown.map(a => {
           const got = owned.ach.has(a.id);
           const icon = a.req.type === 'owned' ? bIcon(B_BY_ID[a.req.b]) : a.icon;
-          return `<div class="ach ${got ? '' : 'locked'} ${a.hidden ? 'hidden-ach' : ''} ${a.limited ? 'limited' : ''}" data-tip="ach:${a.id}">${got ? icon : '???'}</div>`;
+          return `<div class="ach ${got ? '' : 'locked'} ${a.hidden ? 'hidden-ach' : ''} ${a.limited ? 'limited' : ''}" data-ev="${a.req.ev || ''}" data-tip="ach:${a.id}">${got ? icon : '???'}</div>`;
         }).join('')}</div>`;
       }).join('')}
       ${hiddenLeft ? `<p class="muted small" style="margin-top:14px">…and ${hiddenLeft} secret achievement${hiddenLeft > 1 ? 's' : ''} you haven't found yet.</p>` : ''}`;
@@ -1611,23 +1664,23 @@
     openModal({ title: 'Dream Shop', html: dreamShopHTML(), onMount: mount });
   }
 
-  /* ---------- Event panel + Treat shop ---------- */
+  /* ---------- Event panel + shop (a tab per event; only the running event's shop is buyable) ---------- */
   function buyShopItem(id) {
     const it = SHOP_BY_ID[id];
-    if (!it || !eventOn || state.event.treats < it.cost) return false;
+    if (!it || !eventOn || it.ev !== EV.id || ES().treats < it.cost) return false;
     if (it.kind === 'boost') {
       if (hasBuff(it.buff)) return false;                    // one of each at a time
       addBuff(it.buff, it.duration);
     } else {
       if (evOwns(id)) return false;
-      state.event.owned.push(id);
-      if (it.kind === 'costume') state.event.costume = id;  // wear it right away
-      if (it.kind === 'font') state.event.tickerFont = true;
-      if (it.kind === 'cursor') state.event.batCursor = true;
+      ES().owned.push(id);
+      if (it.kind === 'costume') state.cos.costume = id;    // wear / use it right away
+      if (it.kind === 'font') state.cos.font = id;
+      if (it.kind === 'cursor') state.cos.cursor = id;
       if (it.kind === 'skin') { checkSkins(); setSkin(it.skin); }
     }
-    state.event.treats -= it.cost;
-    $('#treats').textContent = fmt(state.event.treats);
+    ES().treats -= it.cost;
+    $('#treats').textContent = fmt(ES().treats);
     dirty = true;
     applyCosmetics();
     sound('buy'); confetti();
@@ -1636,58 +1689,73 @@
     return true;
   }
   function wearCostume(id) {
-    if (id && !evOwns(id)) return false;
-    state.event.costume = id || '';
+    if (id && !(evOwns(id) && SHOP_BY_ID[id].kind === 'costume')) return false;
+    state.cos.costume = id || '';
     applyCosmetics();
     save();
     return true;
   }
-  function eventPanelHTML() {
-    const t = state.event.treats, on = eventOn;
-    const end = eventEndsAt(), left = end ? (end - clock.now()) / 1000 : 0;
-    const preview = on && state.settings.eventOverride !== 'auto' && !inEventWindow(clock.now());
+  function toggleCosmetic(id) {
+    const it = SHOP_BY_ID[id];
+    if (!it || !evOwns(id)) return;
+    state.cos[it.kind] = state.cos[it.kind] === id ? '' : id;  // one font / cursor at a time
+    applyCosmetics();
+    save();
+  }
+  function eventPanelHTML(pev) {
+    const es = state.events[pev.id], t = es.treats, running = eventOn && EV.id === pev.id, cur = pev.currency;
+    const end = eventEndsAt(pev), left = end ? (end - clock.now()) / 1000 : 0;
+    const preview = running && normOverride(state.settings.eventOverride) !== 'auto' && !inEventWindow(clock.now(), pev);
+    const sd = running && bdayOn ? SD : null;
     const status = preview
-      ? `${bdayOn ? `${SD.icon} <b>${SD.name}</b> preview. ` : ''}<b>Preview mode</b> (debug toggle). The real event runs Oct ${EV.start[1]} – Nov ${EV.end[1]}.`
-      : on
-      ? `${bdayOn ? `${SD.icon} <b>${SD.name}!</b> ×${SD.treatDropMult} Treats and Birthday Cakes today. · ` : ''}Ends in <b>${left > 86400 ? `${Math.floor(left / 86400)}d ${Math.floor(left % 86400 / 3600)}h` : fmtTime(left)}</b>`
-      : `The event is over. Your Treats, cosmetics and achievements are saved for next year (Oct ${EV.start[1]} – Nov ${EV.end[1]}). The shop is browse-only until then.`;
+      ? `${sd ? `${sd.icon} <b>${sd.name}</b> preview. ` : ''}<b>Preview mode</b> (debug toggle). The real event runs ${eventDates(pev)}.`
+      : running
+      ? `${sd ? `${sd.icon} <b>${sd.name}!</b> ${sd.banner} today. · ` : ''}Ends in <b>${left > 86400 ? `${Math.floor(left / 86400)}d ${Math.floor(left % 86400 / 3600)}h` : fmtTime(left)}</b>`
+      : `${eventOn ? `This event isn't running right now (${EV.name} is).` : 'This event is over.'} Your ${cur.name}, cosmetics and achievements are saved for next time (${eventDates(pev)}). The shop is browse-only until then.`;
     const btn = it => {
       const owns = it.kind !== 'boost' && evOwns(it.id);
-      if (it.kind === 'costume' && owns) return state.event.costume === it.id
+      if (it.kind === 'costume' && owns) return state.cos.costume === it.id
         ? `<button class="sticker" data-wear="">Take off</button>` : `<button class="sticker pink" data-wear="${it.id}">Wear</button>`;
-      if (it.kind === 'font' && owns) return `<button class="sticker ${state.event.tickerFont ? '' : 'pink'}" data-toggle="tickerFont">${state.event.tickerFont ? 'On' : 'Off'}</button>`;
-      if (it.kind === 'cursor' && owns) return `<button class="sticker ${state.event.batCursor ? '' : 'pink'}" data-toggle="batCursor">${state.event.batCursor ? 'On' : 'Off'}</button>`;
+      if ((it.kind === 'font' || it.kind === 'cursor') && owns) {
+        const on = state.cos[it.kind] === it.id;
+        return `<button class="sticker ${on ? '' : 'pink'}" data-toggle="${it.id}">${on ? 'On' : 'Off'}</button>`;
+      }
       if (owns) return `<button class="sticker" disabled>Owned</button>`;
       const active = it.kind === 'boost' && state.buffs.find(b => b.type === it.buff);
       if (active) return `<button class="sticker" disabled>Active · ${fmtTime(active.left)}</button>`;
-      return `<button class="sticker pink" data-buy="${it.id}" ${!on || t < it.cost ? 'disabled' : ''}>🍬 ${fmt(it.cost)}</button>`;
+      return `<button class="sticker pink" data-buy="${it.id}" ${!running || t < it.cost ? 'disabled' : ''}>${cur.icon} ${fmt(it.cost)}</button>`;
     };
     const card = it => `<div class="shop-item ${it.kind !== 'boost' && evOwns(it.id) ? 'owned' : ''}">
         <div class="si-ico">${it.art ? `<img src="${window.KICONS.uri(it.art)}" alt="">` : it.icon}</div>
         <div><div class="si-name">${esc(it.name)}${it.kind !== 'boost' && evOwns(it.id) ? ' <span class="si-owned">Owned</span>' : ''}</div><div class="si-desc">${it.desc}</div></div>
         ${btn(it)}</div>`;
-    const group = (title, kinds) => `<h3>${title}</h3><div class="shop-grid">${EV.shop.filter(i => kinds.includes(i.kind)).map(card).join('')}</div>`;
-    return `<p class="event-status">${status}</p>
-      <div class="treat-balance">${EV.currency.icon} <b>${fmt(t)}</b> ${EV.currency.name} <span class="muted small">· ${fmt(state.event.treatsTotal)} collected all-time</span></div>
-      <p class="muted small">Treats drop from ~${Math.round(EV.currency.dropChance * 100)}% of clicks and from Trick-or-Treat Bursts (orange). A Trick is a harmless 20s prank that still pays ×${EV.trick.prodMult} production.</p>
-      ${group('Costumes', ['costume'])}
+    const group = (title, kinds) => `<h3>${title}</h3><div class="shop-grid">${pev.shop.filter(i => kinds.includes(i.kind)).map(card).join('')}</div>`;
+    const tabs = D.EVENTS.length > 1 ? `<div class="ev-tabs" role="tablist">${D.EVENTS.map(e => `<button class="ev-tab ${e === pev ? 'on' : ''}" role="tab" aria-selected="${e === pev}" data-evtab="${e.id}">${e.icon} ${esc(e.name.replace(/^Kuromi's /, ''))}${eventOn && EV === e ? ' <span class="ev-live">live</span>' : ''}</button>`).join('')}</div>` : '';
+    const bigNames = pev.specialDays.map(x => x.bigBurst.name + 's').join(' / ');
+    const badWord = pev.burst.bad.replace(/^\S+\s/, '').replace('!', '');
+    return `${tabs}<p class="event-status">${status}</p>
+      <div class="treat-balance">${cur.icon} <b>${fmt(t)}</b> ${cur.name} <span class="muted small">· ${fmt(es.treatsTotal)} collected all-time</span></div>
+      <p class="muted small">${cur.name} drop from ~${Math.round(cur.dropChance * 100)}% of clicks and from ${pev.burst.name}s. A ${badWord} outcome is a harmless 20s prank that still pays ×${pev.trick.prodMult} production.</p>
+      ${group('Costumes (wear one from any event)', ['costume'])}
       ${group('Boosts (one of each at a time)', ['boost'])}
-      ${group('Cosmetics & the big wish', ['skin', 'font', 'cursor', 'upgrade'])}
+      ${group('Cosmetics & the big upgrade', ['skin', 'font', 'cursor', 'upgrade'])}
       <h3>Event stats</h3>
       <div class="stat-grid">
-        <div class="k">Trick-or-Treat Bursts</div><div class="v">${state.event.tbursts}</div>
-        <div class="k">Times tricked</div><div class="v">${state.event.tricked}</div>
-        <div class="k">Birthday Cakes</div><div class="v">${state.event.cakes}</div>
+        <div class="k">${pev.burst.name}s</div><div class="v">${es.tbursts}</div>
+        <div class="k">${badWord} surprises</div><div class="v">${es.tricked}</div>
+        <div class="k">${bigNames}</div><div class="v">${es.cakes}</div>
       </div>`;
   }
-  function openEvent() {
+  function openEvent(id) {
+    let pev = EV_BY_ID[id] || (eventOn ? EV : D.EVENTS.find(e => hasEventStuff(e.id)) || EV);
     const mount = root => {
-      const redraw = () => { root.querySelector('.modal-body').innerHTML = eventPanelHTML(); mount(root); };
+      const redraw = () => { root.querySelector('.modal-body').innerHTML = eventPanelHTML(pev); root.querySelector('h2').textContent = `${pev.icon} ${pev.name}`; mount(root); };
+      root.querySelectorAll('[data-evtab]').forEach(b => b.addEventListener('click', () => { pev = EV_BY_ID[b.dataset.evtab]; redraw(); }));
       root.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => { if (buyShopItem(b.dataset.buy)) redraw(); }));
       root.querySelectorAll('[data-wear]').forEach(b => b.addEventListener('click', () => { wearCostume(b.dataset.wear); redraw(); }));
-      root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => { state.event[b.dataset.toggle] = !state.event[b.dataset.toggle]; applyCosmetics(); save(); redraw(); }));
+      root.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => { toggleCosmetic(b.dataset.toggle); redraw(); }));
     };
-    openModal({ title: `${EV.icon} ${EV.name}`, html: eventPanelHTML(), onMount: mount });
+    openModal({ title: `${pev.icon} ${pev.name}`, html: eventPanelHTML(pev), onMount: mount });
   }
 
   /* ---------- Prestige confirm ---------- */
@@ -1728,7 +1796,7 @@
     const s = state.settings;
     const sw = (key, label) => `<label class="setting-row"><span>${label}</span><span class="switch"><input type="checkbox" data-set="${key}" ${s[key] ? 'checked' : ''}><span></span></span></label>`;
     const slider = (key, label) => `<label class="setting-row"><span>${label}</span><input type="range" min="0" max="1" step="0.05" data-set="${key}" value="${s[key]}" aria-label="${label}"></label>`;
-    const skins = D.SKINS.filter(sk => !sk.event || skinUnlocked(sk) || eventOn).map(sk => {
+    const skins = D.SKINS.filter(sk => !sk.event || skinUnlocked(sk) || (eventOn && EV.id === sk.event)).map(sk => {
       const open = skinUnlocked(sk), on = document.body.dataset.theme === sk.id;
       return `<button class="skin-btn ${on ? 'on' : ''}" data-skin="${sk.id}" ${open ? '' : 'disabled'} aria-pressed="${on}">
         <span class="skin-swatch">${sk.preview.map(c => `<i style="background:${c}"></i>`).join('')}</span>
@@ -1825,6 +1893,13 @@
      Debug panel (press D three times)
      ===================================================================== */
   const dPresses = [];
+  function overrideLabel(o) {
+    o = normOverride(o);
+    if (o === 'auto' || o === 'off') return o;
+    const [eid, sid] = o.split(':'), ev = EV_BY_ID[eid];
+    const sd = sid && ev.specialDays.find(x => x.id === sid);
+    return sd ? `${sd.icon} ${sd.name}` : `${ev.icon} ${ev.name.replace(/^Kuromi's /, '')}`;
+  }
   function buildDebug() {
     const dbg = $('#debug');
     const btns = [
@@ -1832,17 +1907,18 @@
       ['×100 speed', b => { debugSpeed = debugSpeed === 1 ? 100 : 1; b.textContent = debugSpeed === 1 ? '×100 speed' : 'normal speed'; }],
       ['Spawn burst', () => { if (burst) removeBurst(); spawnBurst(); }],
       ['Frenzy', () => addBuff('frenzy', C.frenzy.duration)],
-      ['Spawn cake', () => { if (burst) removeBurst(); spawnBurst(true); }],
+      ['Spawn special', () => { if (burst) removeBurst(); spawnBurst(true); }],
       ['Fill combo', () => { combo = 0.99; }],
       ['Next click = CRIT', () => { state.clicksTotal = Math.ceil((state.clicksTotal + 1) / C.crit.every) * C.crit.every - 1; }],
       ['Skip a day', () => { clock.offset += 864e5; toast('Debug', 'Tomorrow already?', dayKey(clock.now())); }],
       ['Event: auto', b => {
-        const order = ['auto', 'on', 'birthday', 'off']; // auto = device date · on = force event · birthday = force Birthday Day
-        state.settings.eventOverride = order[(order.indexOf(state.settings.eventOverride) + 1) % order.length];
-        b.textContent = 'Event: ' + state.settings.eventOverride;
+        const order = ['auto', ...D.EVENTS.flatMap(e => [e.id, ...e.specialDays.map(x => `${e.id}:${x.id}`)]), 'off'];
+        const cur = normOverride(state.settings.eventOverride);
+        state.settings.eventOverride = order[(order.indexOf(cur) + 1) % order.length];
+        b.textContent = 'Event: ' + overrideLabel(state.settings.eventOverride);
         updateEvent(true);
       }],
-      ['+100 Treats', () => { gainTreats(100); }],
+      ['+100 event currency', () => { gainTreats(100); }],
       ['Unlock all', () => { D.ACHIEVEMENTS.forEach(a => award(a, true)); D.BUILDINGS.forEach(b => { state.revealed[b.id] = true; }); toast('Debug', 'Unlocked everything', 'All achievements & buildings revealed.'); }],
       ['Fake 1h away', () => {
         save();
@@ -1855,7 +1931,7 @@
       ['Reset', () => hardReset()],
     ];
     dbg.innerHTML = '<div class="dbg-title">🛠 debug (press D×3 to hide)</div>';
-    btns.find(x => x[0] === 'Event: auto')[0] = 'Event: ' + state.settings.eventOverride;
+    btns.find(x => x[0] === 'Event: auto')[0] = 'Event: ' + overrideLabel(state.settings.eventOverride);
     btns.forEach(([label, fn]) => {
       const b = document.createElement('button');
       b.className = 'sticker';
@@ -2002,7 +2078,10 @@
       owned: q.b && state.buildings[q.b], upgrades: state.upgrades.length, bursts: state.burstsClicked, prestige: state.prestiges,
       combos: state.combos, crits: state.crits, dailyClaims: state.daily.claims, streak: state.daily.streak,
       skins: state.skinsUnlocked.length, timePlayed: state.timePlayed, totalBuildings: b,
-      evCakes: eventOn ? state.event.cakes : undefined, evEarned: eventOn ? state.event.earned : undefined,
+      evTreats: q.ev ? state.events[q.ev].treatsTotal : undefined, evBursts: q.ev ? state.events[q.ev].tbursts : undefined,
+      evTricked: q.ev ? state.events[q.ev].tricked : undefined,
+      evCakes: q.ev && eventOn && EV.id === q.ev ? state.events[q.ev].cakes : undefined,
+      evEarned: q.ev && eventOn && EV.id === q.ev ? state.events[q.ev].earned : undefined,
     }[q.type];
     if (cur === undefined || !n) return null;
     return { cur, need: n, time: q.type === 'timePlayed' };
@@ -2010,7 +2089,7 @@
   function goalList() {
     const out = [];
     for (const a of D.ACHIEVEMENTS) {
-      if (owned.ach.has(a.id) || a.hidden || (a.limited && !eventOn)) continue;
+      if (owned.ach.has(a.id) || a.hidden || (a.limited && !(eventOn && a.req.ev === EV.id))) continue;
       const p = achProgress(a);
       if (!p) continue;
       const icon = a.req.type === 'owned' ? bIcon(B_BY_ID[a.req.b]) : `<span class="g-emoji">${a.icon}</span>`;
@@ -2060,7 +2139,7 @@
   const giftReady = () => state.daily.last !== dayKey(clock.now());
   function dailyReward(streak) {
     const mult = 1 + C.daily.streakBonus * (Math.min(streak, C.daily.maxStreak) - 1);
-    return Math.max(C.daily.minReward, cache.cpsNoBuff * C.daily.minutes * 60) * mult * (bdayOn ? SD.giftMult : 1);
+    return Math.max(C.daily.minReward, cache.cpsNoBuff * C.daily.minutes * 60) * mult * (bdayOn && SD ? SD.giftMult : 1);
   }
   function claimDaily() {
     if (!giftReady()) return 0;
@@ -2071,16 +2150,16 @@
     const reward = dailyReward(streak);
     earn(reward);
     state.daily = { last: dayKey(today), streak, claims: state.daily.claims + 1 };
-    if (bdayOn) gainTreats(SD.giftTreats);
+    if (bdayOn && SD) gainTreats(SD.giftCurrency);
     renderGift();
     const days = Array.from({ length: C.daily.maxStreak }, (_, i) =>
       `<span class="streak-dot ${i < Math.min(streak, C.daily.maxStreak) ? 'on' : ''}">${i + 1}</span>`).join('');
     const bonus = Math.round(C.daily.streakBonus * (Math.min(streak, C.daily.maxStreak) - 1) * 100);
     openModal({
-      title: bdayOn ? '🎂 Birthday gift!' : '🎁 Daily gift!', narrow: true,
-      html: `<p>${bdayOn ? `A birthday present! ×${SD.giftMult} the usual, plus Treats.` : "Baku dragged in a present. It's slightly chewed."}</p>
+      title: bdayOn && SD ? `${SD.icon} ${SD.giftTitle}` : '🎁 Daily gift!', narrow: true,
+      html: `<p>${bdayOn && SD ? `A ${SD.name} present! ×${SD.giftMult} the usual, plus ${EV.currency.name}.` : "Baku dragged in a present. It's slightly chewed."}</p>
         <div class="big-number"><span class="skull-ico"></span> +${fmt(reward)} Kuromis</div>
-        ${bdayOn ? `<div class="big-number">+${SD.giftTreats} ${EV.currency.icon}</div>` : ''}
+        ${bdayOn && SD ? `<div class="big-number">+${SD.giftCurrency} ${EV.currency.icon}</div>` : ''}
         <div class="streak">${days}</div>
         <p class="muted small" style="text-align:center">Day ${streak} streak${bonus ? ` · +${bonus}% streak bonus` : ''} · worth ${C.daily.minutes} minutes of production. Come back tomorrow!</p>`,
       actions: [{ label: 'Mine!', cls: 'pink', close: true }],
@@ -2093,39 +2172,53 @@
 
   /* ---------- Birthday event overlay ---------- */
   function updateEvent(force = false) {
-    const on = eventActive(), bday = on && onSpecialDay();
-    for (const t of $$('.event-trigger')) t.hidden = !(on || hasEventStuff());
-    if (!force && on === eventOn && bday === bdayOn && document.body.classList.contains('event-halloween') === on) { renderEventBanner(); return; }
+    const r = resolveEvent();
+    const on = !!r.ev, bday = on && !!r.sd;
+    const prevId = EV.id, prevSd = SD ? SD.id : '';
+    if (r.ev) EV = r.ev;
+    SD = r.sd;
+    for (const t of $$('.event-trigger')) { t.hidden = !(on || hasEventStuff()); t.textContent = `${(r.ev || EV).icon} Event`; }
+    const same = on === eventOn && bday === bdayOn && prevId === EV.id && prevSd === (SD ? SD.id : '') && document.body.classList.contains('event-on') === on;
+    if (!force && same) { renderEventBanner(); return; }
     eventOn = on; bdayOn = bday;
-    document.body.classList.toggle('event-halloween', on);
-    document.body.classList.toggle('event-bday', bday);
+    document.body.classList.toggle('event-on', on);
+    for (const e of D.EVENTS) document.body.classList.toggle('event-' + e.id, on && EV === e);
+    document.body.classList.toggle('event-bday', bday);                 // any special day
+    document.body.dataset.specialDay = bday ? SD.id : '';
     $('#event-banner').hidden = !on;
     $('#treats-pill').hidden = !on;
-    $('#treats').textContent = fmt(state.event.treats);
+    $('#treats-ico').textContent = EV.currency.icon;
+    $('#treats').textContent = fmt(ES().treats);
     renderEventBanner();
-    // a few slow bats + tiny pumpkins drifting in the background
+    // a few slow decorations (bats & pumpkins drifting across, snowflakes & stars falling)
     const layer = $('#event-layer');
     layer.innerHTML = '';
     if (on) {
       EV.decor.forEach((id, i) => {
         const d = document.createElement('img');
-        d.className = 'event-item';
+        d.className = 'event-item ' + (EV.decorMotion || 'across');
         d.src = window.KICONS.uri(id); d.alt = '';
-        d.style.top = rand(8, 88) + 'vh';
-        d.style.width = (id === 'ev_bat' ? rand(26, 38) : rand(18, 26)) + 'px';
-        d.style.animationDuration = rand(55, 90) + 's';
-        d.style.animationDelay = -rand(0, 90) + 's';
-        if (i % 2) d.style.animationDirection = 'reverse';
+        if (EV.decorMotion === 'fall') d.style.left = (6 + i * (88 / Math.max(1, EV.decor.length - 1))) + 'vw';
+        else d.style.top = rand(8, 88) + 'vh';
+        d.style.width = (id === 'ev_bat' ? rand(26, 38) : rand(16, 26)) + 'px';
+        d.style.animationDuration = rand(45, 80) + 's';
+        d.style.animationDelay = -rand(0, 80) + 's';
+        if (i % 2 && EV.decorMotion !== 'fall') d.style.animationDirection = 'reverse';
         layer.appendChild(d);
       });
-      if (!state.event.played) { state.event.played = true; toast('Event', EV.name + '!', 'Treats 🍬 drop from clicks and Trick-or-Treat Bursts. Tap the banner to shop.'); }
-      if (bday && state.event.greeted !== dayKey(clock.now())) {
-        state.event.greeted = dayKey(clock.now());
+      if (!ES().played) { ES().played = true; toast('Event', EV.name + '!', EV.intro); }
+      // greet once per special day per season (New Year's spans Dec 31 + Jan 1 but greets once)
+      const now = clock.now(), season = now.getMonth() < EV.start[0] - 1 ? now.getFullYear() - 1 : now.getFullYear();
+      const greetKey = bday ? `${SD.id}:${season}` : '';
+      if (bday && ES().greeted !== greetKey) {
+        ES().greeted = greetKey;
+        const sd = SD, g = sd.greeting;
+        const title = g.title.replace('{year}', now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear());
         setTimeout(() => {
           confetti(); confetti(); sound('fanfare');
-          const html = `<div class="bday-hero">🎂</div><p style="text-align:center">It's Kuromi's birthday! All day: <b>×${SD.treatDropMult} Treats</b>, Birthday Cake bursts (×${EV.cake.mult} production), and a <b>special birthday gift</b>.</p>`;
-          if (!modal) openModal({ title: 'Happy Birthday, Kuromi!', narrow: true, html, actions: [{ label: 'Party time', cls: 'pink', close: true }] });
-          else toast(SD.name, 'Happy Birthday, Kuromi!', `×${SD.treatDropMult} Treats and Birthday Cakes all day!`);
+          const html = `<div class="bday-hero">${g.hero}</div><p style="text-align:center">${g.text}</p>`;
+          if (!modal) openModal({ title, narrow: true, html, actions: [{ label: g.button, cls: 'pink', close: true }] });
+          else toast(sd.name, title, `${sd.banner} all day!`);
         }, 400);
       }
     }
@@ -2134,13 +2227,14 @@
   }
   function renderEventBanner() {
     if (!eventOn) return;
-    const end = eventEndsAt(), left = end ? (end - clock.now()) / 1000 : 0;
-    const preview = state.settings.eventOverride !== 'auto' && !inEventWindow(clock.now());
+    const end = eventEndsAt(EV), left = end ? (end - clock.now()) / 1000 : 0;
+    const preview = normOverride(state.settings.eventOverride) !== 'auto' && !inEventWindow(clock.now(), EV);
     const when = left > 86400 ? `${Math.floor(left / 86400)}d ${Math.floor(left % 86400 / 3600)}h` : fmtTime(left);
-    $('#event-banner-text').textContent = bdayOn
-      ? `${SD.icon} ${SD.name}! ×${SD.treatDropMult} Treats & Birthday Cakes · ${EV.name}${preview ? ' (preview)' : `, ends in ${when}`}`
+    $('#event-banner-text').textContent = bdayOn && SD
+      ? `${SD.icon} ${SD.name}! ${SD.banner} · ${EV.name}${preview ? ' (preview)' : `, ends in ${when}`}`
       : `${EV.icon} ${EV.name}${preview ? ' (preview)' : `, ends in ${when}`}`;
   }
+
 
 
   let slowTicks = 0;
@@ -2149,7 +2243,7 @@
     if (dirty) recalc();
     if (slowTicks % 10 === 0) updateEvent();
     else if (slowTicks % 5 === 0) renderEventBanner();
-    if (bdayOn && state.event.costume) state.event.bdayCostume = true;
+    if (bdayOn && SD && state.cos.costume) ES().specialCostume[SD.id] = true;
     if (cache.cps > state.bestCps) state.bestCps = cache.cps;
     sampleCps();
     renderGift();
@@ -2303,7 +2397,7 @@
     buyBuilding, sellBuilding, buyUpgrade, clickKuromi, spawnBurst, wakeUp, exportSave, importSave, shardsPending, checkAchievements,
     setSpeed: s => { debugSpeed = s; },
     goalList, renderGoals, buildTicker, fitLair,
-    gainTreats, buyShopItem, wearCostume, openEvent, onSpecialDay, eventEndsAt, get eventState() { return { on: eventOn, bday: bdayOn }; },
+    gainTreats, buyShopItem, wearCostume, openEvent, onSpecialDay, eventEndsAt, get eventState() { return { on: eventOn, bday: bdayOn, id: EV.id, sd: SD ? SD.id : null }; }, resolveEvent, toggleCosmetic,
     get combo() { return combo; }, set combo(v) { combo = v; }, advanceCombo: dt => { combo = Math.max(0, combo - C.combo.decayPerSec * dt); },
     clock, dayKey, inEventWindow, eventActive, updateEvent, claimDaily, giftReady, dailyReward,
     skinUnlocked: id => skinUnlocked(SKIN_BY_ID[id]), setSkin, checkSkins, placeTip,

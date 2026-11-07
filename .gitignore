@@ -18,3 +18,9 @@ screenshots/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local tool caches
+.serena/
+
+# Local test suite (Playwright) — kept on this Mac, not published
+tests/
