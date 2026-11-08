@@ -11,7 +11,7 @@ It uses plain HTML, CSS and vanilla JavaScript. Google Fonts load from the web, 
 
 - **Clicking:** the character breathes and wobbles when idle, squashes on each click, and sends a pink ripple from where you tapped. Every **100th click is a CRIT** worth 10×.
 - **Combo meter:** clicking fast fills it. When it's full you get ×2 click power for 10s, and it drains when you stop.
-- **Lair & goals:** each owned building gets a row of up to 8 icons plus a "+N" badge. The Lair fills the middle column; with many buildings it scrolls a whole row at a time, so no row is ever cut off. **Next goals** (under "per click" on desktop, under the Lair on phones) shows the 3 milestones or upgrades you're closest to, with progress bars.
+- **Lair & goals:** each owned building gets a row of up to 8 icons plus a "+N" badge. The Lair fills the middle column; with many buildings it scrolls a whole row at a time, so no row is ever cut off. **Next goals** (at the bottom of the left column on desktop, under the Lair on phones) shows the 3 milestones or upgrades you're closest to, with progress bars.
 - **News ticker:** headlines scroll continuously with no gaps; hover to pause.
 - **Daily gift:** a small 🎁 badge next to the counter wiggles when a gift is ready, once a day, worth 10 minutes of production. Each day in a row adds +15%, up to day 7; missing a day resets the streak.
 - **Kuromi's Birthday Nightmare (Oct 24 – Nov 2, by device date; Oct 31 is Birthday Day):**
@@ -28,6 +28,7 @@ It uses plain HTML, CSS and vanilla JavaScript. Google Fonts load from the web, 
   - The shop has Hot Cocoa and Cozy Lair boosts, costumes (Santa hat, striped scarf, reindeer antlers, New Year party hat), the Frostbite Punk skin, a festive ticker font, a snowflake cursor, and the **New Year's Resolution** (+5% forever, stacks with the Birthday Wish).
   - **Christmas Day:** Golden Present bursts (×12 for 25s), ×2 Snowflakes, and a ×3 Christmas gift with 25 Snowflakes. **New Year's:** Firework bursts (×20 for 20s), ×2 Snowflakes, and a ×3 gift with 20 Snowflakes. Each special day greets you once with confetti.
   - 14 limited ❄️ achievements (one is hidden) and 15 winter headlines.
+  - The New Year greeting's year is worked out from the device date (Dec 31 2027 → "Happy New Year 2028!"), never hard-coded.
 - **How events work:** each event's progress and currency is saved separately and kept between years. Costumes, skins, fonts and cursors you own work all year, from any event. The Event panel has a tab per event, and only the running event's shop is buyable.
 - **Skins:** Midnight Purple, Bubblegum Punk (30 achievements or Dream Shop) and Monochrome Goth (60 achievements or Dream Shop), plus the event skins Pumpkin Punk and Frostbite Punk. Pick one in Settings → Skins.
 - **Sound:** generated effects plus an optional chiptune loop (music box + soft bass), with separate volume sliders. Music is off by default.
@@ -82,7 +83,7 @@ If an image is missing, the character becomes a purple placeholder circle and bu
 | `data.js` | **All balance numbers and content**: buildings, upgrades, achievements, perks, news, combo/crit/daily numbers, events, skins, music notes |
 | `icons.js` | Original SVG icons in one style (thick outline, purple/pink): buildings, upgrade art (`up_*`) and small corner badges (`b_*`). A PNG in `assets/icons/<id>.png` replaces the matching building icon |
 | `game.js` | Engine: production formula, game loop, UI, save system, events, phone tabs, PWA registration |
-| `tests/` | Local Playwright tests (`node tests/core.js`, `node tests/events.js`, `node tests/verify.js <url>`). Git-ignored, never published |
+| `tests/` | Local Playwright tests (`node tests/core.js`, `node tests/ui.js`, `node tests/events.js`, `node tests/verify.js <url>`). Git-ignored, never published |
 | `sw.js` | Service worker: offline cache (bump `CACHE_VERSION` to ship updates) |
 | `manifest.webmanifest`, `app-icons/` | Install info and icons |
 

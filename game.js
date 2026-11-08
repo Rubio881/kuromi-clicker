@@ -220,6 +220,9 @@
   const clock = { offset: 0, now: () => new Date(Date.now() + clock.offset) };
   const pad2 = n => String(n).padStart(2, '0');
   const dayKey = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  // The New Year a date belongs to: Jul–Dec count toward the coming year, Jan–Jun toward the current one
+  // (so Dec 31 2027 → 2028, Jan 1 2028 → 2028, and a November preview → next year). Never hard-coded.
+  const newYearFor = d => d.getFullYear() + (d.getMonth() >= 6 ? 1 : 0);
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const fmtMD = ([m, d]) => `${MONTHS[m - 1]} ${d}`;
   const eventDates = ev => `${fmtMD(ev.start)} – ${fmtMD(ev.end)}`;
@@ -1234,7 +1237,7 @@
     lair.style.flex = 'none';
     lair.style.height = (n * stride - gap) + 'px';
   }
-  // The goals card sits under "per click" in the left column on desktop, but under the Lair on phones
+  // The goals card sits at the bottom of the left column on desktop, but under the Lair on phones
   // (there the left column is the sticky header).
   function placeGoals() {
     const goals = $('#goals'), home = phoneQuery.matches ? $('#col-mid') : $('#col-left');
@@ -2213,7 +2216,7 @@
       if (bday && ES().greeted !== greetKey) {
         ES().greeted = greetKey;
         const sd = SD, g = sd.greeting;
-        const title = g.title.replace('{year}', now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear());
+        const title = g.title.replace('{year}', newYearFor(now));
         setTimeout(() => {
           confetti(); confetti(); sound('fanfare');
           const html = `<div class="bday-hero">${g.hero}</div><p style="text-align:center">${g.text}</p>`;
@@ -2399,7 +2402,7 @@
     goalList, renderGoals, buildTicker, fitLair,
     gainTreats, buyShopItem, wearCostume, openEvent, onSpecialDay, eventEndsAt, get eventState() { return { on: eventOn, bday: bdayOn, id: EV.id, sd: SD ? SD.id : null }; }, resolveEvent, toggleCosmetic,
     get combo() { return combo; }, set combo(v) { combo = v; }, advanceCombo: dt => { combo = Math.max(0, combo - C.combo.decayPerSec * dt); },
-    clock, dayKey, inEventWindow, eventActive, updateEvent, claimDaily, giftReady, dailyReward,
+    clock, dayKey, newYearFor, inEventWindow, eventActive, updateEvent, claimDaily, giftReady, dailyReward,
     skinUnlocked: id => skinUnlocked(SKIN_BY_ID[id]), setSkin, checkSkins, placeTip,
     get shownBank() { return shown.bank; },
   };
